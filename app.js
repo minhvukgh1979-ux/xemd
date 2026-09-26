@@ -4,33 +4,15 @@
 // ============================================================
 
 // ============================================================
-// CẤU HÌNH MẶC ĐỊNH (điền 1 LẦN DUY NHẤT trước khi đưa code lên
-// GitHub Pages, để mở trang là có video ngay, không cần nhập gì).
-//
-// Hỗ trợ NHIỀU TÀI KHOẢN Google Drive cùng lúc: mỗi tài khoản là 1
-// folder riêng (apiKey có thể dùng chung 1 key cho mọi tài khoản, vì
-// API Key chỉ là khoá của 1 project Google Cloud, không gắn với tài
-// khoản Drive nào - cái khác nhau giữa các "tài khoản" ở đây chính là
-// folderLink, tức là 2 folder Drive khác nhau chứa 2 bản phim giống
-// nhau). App sẽ tự quét hết các folder bên dưới, phim nào trùng tên ở
-// nhiều tài khoản sẽ gộp làm 1 mục - khi phát mà tài khoản A bị giới
-// hạn (quota) thì tự động nhảy qua tài khoản B phát tiếp, không cần
-// bấm gì thêm.
-//
-// Để trống apiKey/folderLink của 1 dòng nếu chưa dùng tới - dòng đó sẽ
-// bị bỏ qua. Có thể thêm/bớt/tuỳ chỉnh ngay trên web qua màn hình
-// Cấu hình (⚙️ hoặc phím M) mà không cần sửa file này.
+// CẤU HÌNH MẶC ĐỊNH - chỉ 1 tài khoản Google Drive duy nhất
+// (minhvukgh1979). Có thể sửa apiKey/folderLink ngay trên web qua màn
+// hình Cấu hình (⚙️ hoặc phím M) mà không cần sửa file này.
 // ============================================================
 const DEFAULT_ACCOUNTS = [
   {
     label: 'minhvukgh1979',
     apiKey: 'AIzaSyC8Wyr26jIvv7AETbMshe9u7jv2owfcQRw',
     folderLink: 'https://drive.google.com/drive/folders/17wcsWpbjUcW5shb61luAqPjaRoh-8qL2'
-  },
-  {
-    label: 'minhvukgh1977',
-    apiKey: '',      // <-- điền API Key dùng cho tài khoản 2 (có thể copy y hệt key ở trên)
-    folderLink: ''   // <-- điền link folder Drive THẬT SỰ của minhvukgh1977 (khác folder ở trên)
   }
 ];
 
@@ -42,23 +24,6 @@ let accessToken = null;   // token hiện tại (null nếu chưa đăng nhập)
 let tokenClient = null;
 let swRegistration = null;
 
-// ---------------- OAuth riêng cho Đồng bộ Drive (đọc + GHI) ----------------
-// Dùng chung OAUTH_CLIENT_ID ở trên (không cần Project/Client ID mới), chỉ
-// xin thêm scope 'drive' đầy đủ (đọc/ghi) khi người dùng chủ động bật tính
-// năng Đồng bộ - tách riêng khỏi accessToken (chỉ đọc) dùng để phát video,
-// để không xin quyền ghi khi không cần thiết.
-const SYNC_OAUTH_SCOPE = 'https://www.googleapis.com/auth/drive';
-const SYNC_BACKUP_FILENAME = 'dethidrivetv-backup.json';
-let syncAccessToken = null;
-let syncTokenClient = null;
-let syncTokenExpiresAt = 0;
-let isApplyingRemoteBackup = false; // true khi đang áp bản tải từ Drive, để không tự đẩy ngược lại
-let autoPushTimer = null;
-
-const LS_KEY_SYNC_CONFIG = 'drivetv_sync_config';       // {enabled, folderLink, folderId, apiKey, fileId}
-const LS_KEY_SYNC_LOCAL_TS = 'drivetv_sync_local_ts';   // mốc thời gian thay đổi local gần nhất
-const LS_KEY_SYNC_PUSHED_TS = 'drivetv_sync_pushed_ts'; // mốc thời gian đã đẩy lên Drive gần nhất
-
 const LS_KEY_API = 'drivetv_api_key';             // cũ - chỉ dùng để migrate 1 lần
 const LS_KEY_FOLDER_LINK = 'drivetv_folder_link'; // cũ - chỉ dùng để migrate 1 lần
 const LS_KEY_ACCOUNTS = 'drivetv_accounts';       // [{googleAccount,label,apiKey,folderLink}, ...]
@@ -66,7 +31,7 @@ const LS_KEY_ACCOUNTS_BACKUP = 'drivetv_accounts_backup'; // bản sao dự phò
 const LS_KEY_META = 'drivetv_meta';         // {key: {title, favorite, hidden, note, watchedManual}}
 const LS_KEY_PROGRESS = 'drivetv_progress'; // {key: {time, duration, updatedAt}}
 const LS_KEY_VIEW = 'drivetv_view';         // 'grid' | 'list'
-const LS_KEY_MEDIA_FILTER = 'drivetv_media_filter'; // 'all' | 'video' | 'audio'
+const LS_KEY_MEDIA_FILTER = 'drivetv_media_filter'; // 'all' | 'video' | 'audio' | 'apk'
 const LS_KEY_PLAYER_PREFS = 'drivetv_player_prefs'; // {shuffle, repeat}
 
 // ---------------- DOM refs ----------------
@@ -80,7 +45,6 @@ const settingsBtn = document.getElementById('settingsBtn');
 const signInBtn = document.getElementById('signInBtn');
 const closeSettingsBtn = document.getElementById('closeSettingsBtn');
 const accountsListEl = document.getElementById('accountsList');
-const addAccountBtn = document.getElementById('addAccountBtn');
 const saveBtn = document.getElementById('saveBtn');
 const settingsError = document.getElementById('settingsError');
 
@@ -273,7 +237,6 @@ function saveAccounts(accounts) {
     console.error('saveAccounts failed', e);
     throw new Error('Trình duyệt không cho phép lưu cấu hình. Hãy kiểm tra quyền lưu dữ liệu của trang GitHub Pages.');
   }
-  bumpLocalChangeTs();
 }
 
 function isConfigured() {
@@ -287,7 +250,6 @@ function getMetaStore() {
 
 function saveMetaStore(store) {
   localStorage.setItem(LS_KEY_META, JSON.stringify(store));
-  bumpLocalChangeTs();
 }
 
 // Lưu ý: "key" ở đây là khoá gộp phim theo TÊN (xem fetchFolderVideos),
@@ -319,7 +281,6 @@ function setProgress(key, data) {
   if (data === null) { delete store[key]; }
   else { store[key] = Object.assign({}, data, { updatedAt: Date.now() }); }
   localStorage.setItem(LS_KEY_PROGRESS, JSON.stringify(store));
-  bumpLocalChangeTs();
 }
 
 // Tách folder ID từ link Drive, hoặc chuỗi ID thuần.
@@ -448,205 +409,6 @@ if ('serviceWorker' in navigator) {
 initGoogleAuth();
 updateSignInButton();
 
-// ================= ĐỒNG BỘ CẤU HÌNH QUA GOOGLE DRIVE (tự động) =================
-
-// Cấu hình Đồng bộ Drive MẶC ĐỊNH - lấy thẳng từ tài khoản đầu tiên trong
-// DEFAULT_ACCOUNTS (cùng apiKey + folderLink đã điền ở đầu file), để mở
-// trang lần đầu trên BẤT KỲ máy/trình duyệt nào cũng tự đọc được ngay,
-// không cần bấm gì. Người dùng vẫn có thể đổi lại ở tab ☁️ Đồng bộ Drive.
-function getDefaultSyncConfig() {
-  const def = DEFAULT_ACCOUNTS.map(normalizeAccount).filter(function (a) {
-    return a.apiKey && a.folderLink;
-  })[0];
-  if (!def) return { enabled: false, folderLink: '', folderId: '', apiKey: '', fileId: '' };
-  return {
-    enabled: true,
-    folderLink: def.folderLink,
-    folderId: extractFolderId(def.folderLink),
-    apiKey: def.apiKey,
-    fileId: ''
-  };
-}
-
-function getSyncConfig() {
-  const fallback = getDefaultSyncConfig();
-  try {
-    const c = JSON.parse(localStorage.getItem(LS_KEY_SYNC_CONFIG) || 'null');
-    if (c && typeof c === 'object') {
-      // Cấu hình đã lưu (kể cả từ bản cũ chưa có field apiKey) - giữ nguyên
-      // những gì người dùng đã chọn, chỉ bù các field còn thiếu bằng mặc định.
-      const merged = Object.assign({ enabled: false, folderLink: '', folderId: '', apiKey: '', fileId: '' }, fallback, c);
-      // Chỉ bù apiKey mặc định khi cấu hình cũ CHƯA TỪNG có field này (bản
-      // trước khi có tính năng đọc-bằng-key) - không ghi đè trường hợp
-      // người dùng đã chủ động để trống (vd. folder riêng tư qua wizard).
-      if (c.apiKey === undefined) merged.apiKey = fallback.apiKey;
-      return merged;
-    }
-  } catch (e) { /* ignore */ }
-  return fallback;
-}
-
-function saveSyncConfig(cfg) {
-  localStorage.setItem(LS_KEY_SYNC_CONFIG, JSON.stringify(cfg));
-}
-
-// Gọi mỗi khi có 1 thay đổi cấu hình cục bộ (tài khoản/yêu thích/ẩn/ghi
-// chú/vị trí xem...) - đặt hẹn giờ đẩy lên Drive sau vài giây, để gộp
-// nhiều thay đổi liên tiếp thành 1 lần ghi thay vì ghi liên tục.
-function bumpLocalChangeTs() {
-  if (isApplyingRemoteBackup) return; // đang áp bản từ Drive xuống, không phải người dùng tự đổi
-  localStorage.setItem(LS_KEY_SYNC_LOCAL_TS, String(Date.now()));
-  scheduleAutoPush();
-}
-
-function scheduleAutoPush() {
-  const cfg = getSyncConfig();
-  if (!cfg.enabled) return;
-  if (autoPushTimer) clearTimeout(autoPushTimer);
-  autoPushTimer = setTimeout(function () {
-    pushBackupToDrive(false).catch(function (e) {
-      console.warn('Tự động đồng bộ lên Drive thất bại:', e && e.message);
-    });
-  }, 4000);
-}
-
-// ---- Lấy access token riêng cho Đồng bộ (scope đọc/ghi Drive đầy đủ) ----
-function requestSyncAccessToken(promptMode) {
-  return new Promise(function (resolve, reject) {
-    if (!window.google || !google.accounts || !google.accounts.oauth2) {
-      reject(new Error('Thư viện đăng nhập Google chưa sẵn sàng, hãy thử lại sau vài giây.'));
-      return;
-    }
-    if (!syncTokenClient) {
-      try {
-        syncTokenClient = google.accounts.oauth2.initTokenClient({
-          client_id: OAUTH_CLIENT_ID,
-          scope: SYNC_OAUTH_SCOPE,
-          callback: function () {}
-        });
-      } catch (e) {
-        reject(e);
-        return;
-      }
-    }
-    syncTokenClient.callback = function (response) {
-      if (response && response.access_token) {
-        syncAccessToken = response.access_token;
-        syncTokenExpiresAt = Date.now() + ((response.expires_in || 3600) * 1000);
-        resolve(syncAccessToken);
-      } else {
-        reject(new Error('Không nhận được quyền truy cập Google Drive.'));
-      }
-    };
-    syncTokenClient.error_callback = function (err) {
-      reject(new Error((err && err.type) || 'Đăng nhập/cấp quyền Google Drive thất bại hoặc bị huỷ.'));
-    };
-    try {
-      syncTokenClient.requestAccessToken(promptMode === undefined ? {} : { prompt: promptMode });
-    } catch (e) {
-      reject(e);
-    }
-  });
-}
-
-// Dùng token còn hạn nếu có; nếu hết hạn, thử xin lại 1 cách âm thầm
-// (prompt:'') trước - chỉ khi thất bại mới cần người dùng bấm đăng nhập
-// lại thủ công qua nút trong wizard.
-async function ensureSyncAccessToken() {
-  if (syncAccessToken && Date.now() < syncTokenExpiresAt - 30000) return syncAccessToken;
-  return requestSyncAccessToken('');
-}
-
-async function driveApiFetch(url, options) {
-  const token = await ensureSyncAccessToken();
-  const opts = Object.assign({}, options || {});
-  opts.headers = Object.assign({}, opts.headers, { Authorization: 'Bearer ' + token });
-  const res = await fetch(url, opts);
-  if (!res.ok) {
-    let msg = 'HTTP ' + res.status;
-    try { const j = await res.json(); msg = (j && j.error && j.error.message) || msg; } catch (e) { /* ignore */ }
-    throw new Error(msg);
-  }
-  return res;
-}
-
-// ---- Đọc (list/tải) file đồng bộ bằng API Key công khai - KHÔNG cần đăng
-// nhập Google. Chỉ hoạt động nếu folder đã chia sẻ "Bất kỳ ai có link"
-// (giống hệt cách app đọc danh sách video). Dùng cho MỌI lượt tự động kéo
-// bản mới nhất về khi mở trang, kể cả lần đầu tiên trên 1 máy/trình duyệt
-// hoàn toàn mới - vì đây là hành động ĐỌC, Google cho phép API Key đọc bất
-// kỳ lúc nào, không giới hạn 1 lần/máy như đăng nhập OAuth.
-async function driveApiKeyFetch(url) {
-  const res = await fetch(url);
-  if (!res.ok) {
-    let msg = 'HTTP ' + res.status;
-    try { const j = await res.json(); msg = (j && j.error && j.error.message) || msg; } catch (e) { /* ignore */ }
-    throw new Error(msg);
-  }
-  return res;
-}
-
-async function findSyncFileIdByApiKey(apiKey, folderId) {
-  const q = encodeURIComponent("'" + folderId + "' in parents and name = '" + SYNC_BACKUP_FILENAME + "' and trashed = false");
-  const url = 'https://www.googleapis.com/drive/v3/files?q=' + q +
-    '&fields=' + encodeURIComponent('files(id,name,modifiedTime)') + '&pageSize=5' +
-    '&key=' + encodeURIComponent(apiKey);
-  const res = await driveApiKeyFetch(url);
-  const data = await res.json();
-  return (data.files && data.files.length) ? data.files[0].id : null;
-}
-
-async function downloadSyncFileByApiKey(apiKey, fileId) {
-  const url = 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) +
-    '?alt=media&key=' + encodeURIComponent(apiKey);
-  const res = await driveApiKeyFetch(url);
-  return res.json();
-}
-
-// ---- Ghi (tạo/cập nhật) file đồng bộ - LUÔN cần đăng nhập Google (OAuth),
-// vì API Key không bao giờ có quyền ghi lên Drive, dù folder public hay
-// không. Các hàm find/create/update/download bên dưới dùng chung
-// driveApiFetch (đã tự đính kèm access token).
-async function findSyncFileId(folderId) {
-  const q = encodeURIComponent("'" + folderId + "' in parents and name = '" + SYNC_BACKUP_FILENAME + "' and trashed = false");
-  const url = 'https://www.googleapis.com/drive/v3/files?q=' + q +
-    '&fields=' + encodeURIComponent('files(id,name,modifiedTime)') + '&pageSize=5';
-  const res = await driveApiFetch(url);
-  const data = await res.json();
-  return (data.files && data.files.length) ? data.files[0].id : null;
-}
-
-async function createSyncFile(folderId, contentStr) {
-  const boundary = '-------dethidrivetvsync' + Date.now();
-  const metadata = { name: SYNC_BACKUP_FILENAME, parents: [folderId], mimeType: 'application/json' };
-  const body =
-    '--' + boundary + '\r\n' +
-    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-    JSON.stringify(metadata) + '\r\n' +
-    '--' + boundary + '\r\n' +
-    'Content-Type: application/json\r\n\r\n' +
-    contentStr + '\r\n' +
-    '--' + boundary + '--';
-  const res = await driveApiFetch(
-    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
-    { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body: body }
-  );
-  const data = await res.json();
-  return data.id;
-}
-
-async function updateSyncFile(fileId, contentStr) {
-  await driveApiFetch(
-    'https://www.googleapis.com/upload/drive/v3/files/' + encodeURIComponent(fileId) + '?uploadType=media',
-    { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: contentStr }
-  );
-}
-
-async function downloadSyncFile(fileId) {
-  const res = await driveApiFetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) + '?alt=media');
-  return res.json();
-}
-
 // ---- Dùng chung với tab "Sao lưu": gói toàn bộ cấu hình / áp dụng lại ----
 function buildBackupPayload() {
   return {
@@ -659,248 +421,10 @@ function buildBackupPayload() {
 
 function applyBackupPayload(data) {
   if (!data || !Array.isArray(data.accounts)) throw new Error('Dữ liệu sao lưu không đúng định dạng.');
-  isApplyingRemoteBackup = true;
-  try {
-    saveAccounts(data.accounts);
-    if (data.meta && typeof data.meta === 'object') saveMetaStore(data.meta);
-    if (data.progress && typeof data.progress === 'object') localStorage.setItem(LS_KEY_PROGRESS, JSON.stringify(data.progress));
-  } finally {
-    isApplyingRemoteBackup = false;
-  }
+  saveAccounts(data.accounts);
+  if (data.meta && typeof data.meta === 'object') saveMetaStore(data.meta);
+  if (data.progress && typeof data.progress === 'object') localStorage.setItem(LS_KEY_PROGRESS, JSON.stringify(data.progress));
 }
-
-async function pushBackupToDrive(manual) {
-  const cfg = getSyncConfig();
-  if (!cfg.enabled || !cfg.folderId) {
-    if (manual) toast('Chưa bật đồng bộ Drive.', 'err');
-    return;
-  }
-  const payload = buildBackupPayload();
-  const content = JSON.stringify(payload, null, 2);
-  // Tìm fileId (nếu chưa biết) bằng API Key trước - đỡ phải xin token chỉ
-  // để tìm; token chỉ thật sự cần cho bước ghi (tạo/cập nhật) ngay sau đây.
-  let fileId = cfg.fileId || null;
-  if (!fileId && cfg.apiKey) {
-    try { fileId = await findSyncFileIdByApiKey(cfg.apiKey, cfg.folderId); }
-    catch (e) { /* folder có thể riêng tư - để nhánh OAuth bên dưới tự tìm lại */ }
-  }
-  if (!fileId) fileId = await findSyncFileId(cfg.folderId);
-  if (fileId) { await updateSyncFile(fileId, content); }
-  else { fileId = await createSyncFile(cfg.folderId, content); }
-  cfg.fileId = fileId;
-  saveSyncConfig(cfg);
-  localStorage.setItem(LS_KEY_SYNC_PUSHED_TS, String(Date.parse(payload.exportedAt) || Date.now()));
-  if (manual) toast('✓ Đã đồng bộ lên Google Drive.', 'ok');
-  updateSyncStatusUI();
-}
-
-async function pullBackupFromDrive(manual) {
-  const cfg = getSyncConfig();
-  if (!cfg.enabled || !cfg.folderId) {
-    if (manual) toast('Chưa bật đồng bộ Drive.', 'err');
-    return false;
-  }
-
-  // Luồng ĐỌC: ưu tiên dùng API Key công khai trước - không cần đăng nhập,
-  // chạy được ngay cả lần đầu tiên mở trang trên 1 máy/trình duyệt mới.
-  // Chỉ khi cách này thất bại (vd. người dùng tự đổi sang 1 folder riêng
-  // tư qua wizard) mới rơi về luồng OAuth (cần đã đăng nhập/cấp quyền).
-  let fileId = cfg.fileId || null;
-  let data = null;
-  let usedApiKey = false;
-  if (cfg.apiKey) {
-    try {
-      if (!fileId) fileId = await findSyncFileIdByApiKey(cfg.apiKey, cfg.folderId);
-      if (fileId) {
-        data = await downloadSyncFileByApiKey(cfg.apiKey, fileId);
-        usedApiKey = true;
-      }
-    } catch (e) {
-      console.warn('Đọc bằng API Key thất bại, thử lại bằng tài khoản đã đăng nhập:', e && e.message);
-      fileId = cfg.fileId || null; // reset, để nhánh OAuth tự tìm lại nếu cần
-    }
-  }
-  if (!usedApiKey) {
-    try {
-      if (!fileId) fileId = await findSyncFileId(cfg.folderId);
-      if (fileId) data = await downloadSyncFile(fileId);
-    } catch (e) {
-      // Chỉ báo lỗi khi người dùng chủ động bấm nút - lúc tự động chạy nền
-      // lúc mở trang thì im lặng bỏ qua, tránh hiện popup đăng nhập phiền.
-      if (manual) throw e;
-      console.warn('Không tự đồng bộ được từ Drive (cần đăng nhập):', e && e.message);
-      return false;
-    }
-  }
-
-  if (!fileId || !data) {
-    if (manual) toast('Chưa có file đồng bộ nào trên Drive - hãy bấm "Đồng bộ ngay" trước.', 'err');
-    return false;
-  }
-  cfg.fileId = fileId;
-  saveSyncConfig(cfg);
-  const remoteTs = (data && data.exportedAt) ? Date.parse(data.exportedAt) : 0;
-  const localTs = Number(localStorage.getItem(LS_KEY_SYNC_LOCAL_TS) || 0);
-  if (manual || remoteTs > localTs) {
-    applyBackupPayload(data);
-    localStorage.setItem(LS_KEY_SYNC_LOCAL_TS, String(remoteTs || Date.now()));
-    localStorage.setItem(LS_KEY_SYNC_PUSHED_TS, String(remoteTs || Date.now()));
-    if (manual) toast('✓ Đã áp dụng bản đồng bộ từ Drive. Đang tải lại...', 'ok');
-    setTimeout(function () { location.reload(); }, 800);
-    return true;
-  }
-  return false;
-}
-
-// Gọi lúc khởi động app: nếu đã bật đồng bộ và có bản trên Drive mới hơn
-// bản trên máy này, tự áp dụng luôn (không cần bấm gì).
-async function tryAutoRestoreFromDrive() {
-  const cfg = getSyncConfig();
-  if (!cfg.enabled || !cfg.folderId) return;
-  try {
-    await pullBackupFromDrive(false);
-  } catch (e) {
-    console.warn('Không tự đồng bộ được từ Drive lúc khởi động:', e && e.message);
-  }
-}
-
-function updateSyncStatusUI() {
-  const box = document.getElementById('syncStatusBox');
-  const activeActions = document.getElementById('syncActiveActions');
-  const enableBtn = document.getElementById('syncEnableBtn');
-  if (!box) return;
-  const cfg = getSyncConfig();
-  if (cfg.enabled) {
-    const pushedTs = Number(localStorage.getItem(LS_KEY_SYNC_PUSHED_TS) || 0);
-    const lastText = pushedTs ? new Date(pushedTs).toLocaleString('vi-VN') : 'chưa lần nào';
-    const readNote = cfg.apiKey
-      ? 'Đọc tự động bằng API Key - không cần đăng nhập.'
-      : 'Folder này cần đăng nhập Google mới đọc được (không có API Key công khai).';
-    box.innerHTML = '✅ Đang bật - Folder: <b>' + escapeHtml(cfg.folderLink) + '</b><br>' +
-      readNote + ' Ghi (Đồng bộ ngay) luôn cần đăng nhập 1 lần/máy.<br>' +
-      'Lần đồng bộ gần nhất: ' + escapeHtml(lastText);
-    if (activeActions) activeActions.classList.remove('hidden');
-    if (enableBtn) enableBtn.classList.add('hidden');
-  } else {
-    box.innerHTML = 'Chưa bật đồng bộ tự động.';
-    if (activeActions) activeActions.classList.add('hidden');
-    if (enableBtn) enableBtn.classList.remove('hidden');
-  }
-}
-
-document.getElementById('syncNowBtn')?.addEventListener('click', function () {
-  pushBackupToDrive(true).catch(function (e) { toast('✗ Đồng bộ lỗi: ' + (e.message || String(e)), 'err'); });
-});
-document.getElementById('syncPullBtn')?.addEventListener('click', function () {
-  pullBackupFromDrive(true).catch(function (e) { toast('✗ Kéo dữ liệu lỗi: ' + (e.message || String(e)), 'err'); });
-});
-document.getElementById('syncDisableBtn')?.addEventListener('click', function () {
-  const cfg = getSyncConfig();
-  cfg.enabled = false;
-  saveSyncConfigWithoutBump(cfg);
-  toast('Đã tắt đồng bộ tự động (file trên Drive vẫn còn, chỉ ngừng tự đẩy/kéo).', 'ok');
-  updateSyncStatusUI();
-});
-// saveSyncConfig không nên tự kích hoạt bumpLocalChangeTs (không liên quan
-// nội dung cấu hình phim), nên tách riêng để rõ ràng ý định.
-function saveSyncConfigWithoutBump(cfg) { saveSyncConfig(cfg); }
-
-// ================= WIZARD BẬT ĐỒNG BỘ DRIVE =================
-const syncWizard = document.getElementById('syncWizard');
-let syncWizardData = { folderLink: '', folderId: '' };
-
-function syncWizardShowStep(step) {
-  syncWizard.querySelectorAll('.wizard-panel').forEach(function (p) {
-    p.classList.toggle('hidden', Number(p.dataset.spanel) !== step);
-  });
-  syncWizard.querySelectorAll('[data-swstep]').forEach(function (p) {
-    const n = Number(p.dataset.swstep);
-    p.classList.toggle('active', n === step);
-    p.classList.toggle('done', n < step);
-  });
-}
-
-document.getElementById('syncEnableBtn')?.addEventListener('click', function () {
-  syncWizardData = { folderLink: '', folderId: '' };
-  const input = document.getElementById('syncFolderLink');
-  if (input) input.value = '';
-  const loginStatus = document.getElementById('syncLoginStatus');
-  if (loginStatus) loginStatus.textContent = '';
-  const testStatus = document.getElementById('syncTestStatus');
-  if (testStatus) testStatus.textContent = '';
-  const finishBtn = document.getElementById('syncFinishBtn');
-  if (finishBtn) finishBtn.disabled = true;
-  syncWizardShowStep(1);
-  syncWizard.classList.remove('hidden');
-  syncWizard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-});
-document.getElementById('closeSyncWizardBtn')?.addEventListener('click', function () {
-  syncWizard.classList.add('hidden');
-});
-
-document.getElementById('syncStep1Next')?.addEventListener('click', function () {
-  const link = document.getElementById('syncFolderLink').value.trim();
-  if (!link) { toast('Hãy dán link folder Drive.', 'err'); return; }
-  const folderId = extractFolderId(link);
-  if (!folderId) { toast('Không nhận ra được folder ID từ link này.', 'err'); return; }
-  syncWizardData.folderLink = link;
-  syncWizardData.folderId = folderId;
-  syncWizardShowStep(2);
-});
-
-document.getElementById('syncLoginBtn')?.addEventListener('click', async function () {
-  const status = document.getElementById('syncLoginStatus');
-  if (status) status.textContent = '⏳ Đang mở màn hình đăng nhập Google...';
-  try {
-    await requestSyncAccessToken();
-    if (status) status.textContent = '✓ Đã cấp quyền Google Drive.';
-    syncWizardShowStep(3);
-  } catch (e) {
-    if (status) status.textContent = '✗ ' + (e.message || String(e));
-  }
-});
-
-document.getElementById('syncTestBtn')?.addEventListener('click', async function () {
-  const status = document.getElementById('syncTestStatus');
-  const finishBtn = document.getElementById('syncFinishBtn');
-  if (status) status.textContent = '⏳ Đang kiểm tra quyền ghi vào folder...';
-  if (finishBtn) finishBtn.disabled = true;
-  try {
-    const payload = buildBackupPayload();
-    const content = JSON.stringify(payload, null, 2);
-    let fileId = await findSyncFileId(syncWizardData.folderId);
-    if (fileId) { await updateSyncFile(fileId, content); }
-    else { fileId = await createSyncFile(syncWizardData.folderId, content); }
-    syncWizardData.fileId = fileId;
-    if (status) status.textContent = '✓ Ghi thử thành công - file "' + SYNC_BACKUP_FILENAME + '" đã có trong folder.';
-    if (finishBtn) finishBtn.disabled = false;
-  } catch (e) {
-    if (status) status.textContent = '✗ Ghi thử thất bại: ' + (e.message || String(e)) + ' (kiểm tra lại bạn đã đăng nhập đúng tài khoản có quyền chỉnh sửa folder này chưa).';
-  }
-});
-
-document.getElementById('syncFinishBtn')?.addEventListener('click', function () {
-  // Nếu folder vừa chọn trùng với 1 trong các tài khoản video đã cấu hình,
-  // tái dùng luôn apiKey của tài khoản đó - nhờ vậy vẫn ĐỌC được không cần
-  // đăng nhập ở các lần mở sau (chỉ cần đăng nhập lại khi thật sự GHI).
-  // Nếu là 1 folder hoàn toàn khác (vd. riêng tư), để trống - app sẽ tự
-  // dùng luôn tài khoản đã đăng nhập ở bước 2 cho việc đọc lẫn ghi.
-  const matchedAccount = getAccounts().find(function (a) {
-    return extractFolderId(a.folderLink) === syncWizardData.folderId;
-  });
-  const cfg = {
-    enabled: true,
-    folderLink: syncWizardData.folderLink,
-    folderId: syncWizardData.folderId,
-    apiKey: matchedAccount ? matchedAccount.apiKey : '',
-    fileId: syncWizardData.fileId || ''
-  };
-  saveSyncConfigWithoutBump(cfg);
-  localStorage.setItem(LS_KEY_SYNC_PUSHED_TS, String(Date.now()));
-  syncWizard.classList.add('hidden');
-  updateSyncStatusUI();
-  toast('✓ Đã bật đồng bộ tự động qua Google Drive.', 'ok');
-});
 
 function normalizeForSearch(str) {
   return (str || '')
@@ -921,11 +445,21 @@ function formatTime(sec) {
   return h > 0 ? (h + ':' + mm + ':' + ss) : (mm + ':' + ss);
 }
 
+function formatFileSize(bytes) {
+  if (!bytes || bytes <= 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  let n = bytes;
+  while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+  return (i === 0 ? n : n.toFixed(1)) + ' ' + units[i];
+}
+
 // ---------------- Nhận diện loại file ----------------
 
 const VIDEO_EXTENSIONS = ['mp4', 'webm', 'ogg', 'ogv', 'mov', 'm4v', 'mkv'];
 const AUDIO_EXTENSIONS = ['mp3', 'm4a', 'wav', 'flac', 'aac', 'wma', 'opus', 'oga'];
 const SUBTITLE_EXTENSIONS = ['srt', 'vtt', 'ass', 'ssa'];
+const APK_EXTENSIONS = ['apk'];
 
 function getExtension(name) {
   const m = /\.([a-zA-Z0-9]+)$/.exec(name || '');
@@ -952,6 +486,24 @@ function isPlayableMediaFile(file) {
   return isVideoFile(file) || isAudioFile(file);
 }
 
+// File .apk (ứng dụng Android) - không phát được, chỉ để tải về máy
+// rồi tự cài đặt (giống mở link tải APK ngoài trình duyệt).
+function isApkFile(file) {
+  if (file.mimeType === 'application/vnd.android.package-archive') return true;
+  return APK_EXTENSIONS.includes(getExtension(file.name));
+}
+
+// Loại file app này có quản lý/hiển thị trong danh sách (video, nhạc, apk).
+function isManagedFile(file) {
+  return isPlayableMediaFile(file) || isApkFile(file);
+}
+
+function detectMediaType(file) {
+  if (isAudioFile(file)) return 'audio';
+  if (isApkFile(file)) return 'apk';
+  return 'video';
+}
+
 function isSubtitleFile(file) {
   return SUBTITLE_EXTENSIONS.includes(getExtension(file.name));
 }
@@ -965,7 +517,7 @@ async function listFolderFiles(apiKey, folderId) {
   do {
     const q = encodeURIComponent("'" + folderId + "' in parents and trashed = false");
     let url = 'https://www.googleapis.com/drive/v3/files?q=' + q +
-      '&fields=' + encodeURIComponent('nextPageToken, files(id,name,mimeType,thumbnailLink,createdTime)') +
+      '&fields=' + encodeURIComponent('nextPageToken, files(id,name,mimeType,thumbnailLink,createdTime,size)') +
       '&orderBy=' + encodeURIComponent('name') +
       '&pageSize=1000&key=' + encodeURIComponent(apiKey);
     if (pageToken) url += '&pageToken=' + encodeURIComponent(pageToken);
@@ -984,128 +536,6 @@ async function listFolderFiles(apiKey, folderId) {
 
   return files;
 }
-
-// ================= ĐỒNG BỘ FOLDER GIỮA CÁC TÀI KHOẢN (copy file) =================
-// Copy toàn bộ video + phụ đề còn THIẾU từ 1 folder (tài khoản nguồn) sang
-// 1 folder khác (tài khoản đích), để 2 tài khoản có cùng bộ phim -> tính
-// năng dự phòng (nhảy tài khoản khi hết quota) mới thật sự có tác dụng.
-//
-// Cách hoạt động: dùng API Key (đọc, không cần đăng nhập) để liệt kê file
-// ở folder NGUỒN - vì folder đó đã để "Bất kỳ ai có link". Sau đó đăng
-// nhập bằng CHÍNH TÀI KHOẢN ĐÍCH (chọn đúng account đó ở màn hình Google
-// hiện ra) rồi gọi Drive API "files.copy" - Google copy thẳng file từ
-// folder nguồn (chỉ cần có quyền xem) sang folder đích, ngay trên server
-// của Google - web KHÔNG tải video về máy rồi tải lên lại, nên dù phim
-// nặng vài GB cũng không tốn băng thông hay pin của máy đang mở trang.
-
-let copyAccessToken = null;
-let copyTokenClient = null;
-let copyTokenExpiresAt = 0;
-
-function requestCopyAccessToken(promptMode) {
-  return new Promise(function (resolve, reject) {
-    if (!window.google || !google.accounts || !google.accounts.oauth2) {
-      reject(new Error('Thư viện đăng nhập Google chưa sẵn sàng, hãy thử lại sau vài giây.'));
-      return;
-    }
-    if (!copyTokenClient) {
-      try {
-        copyTokenClient = google.accounts.oauth2.initTokenClient({
-          client_id: OAUTH_CLIENT_ID,
-          scope: SYNC_OAUTH_SCOPE,
-          callback: function () {}
-        });
-      } catch (e) { reject(e); return; }
-    }
-    copyTokenClient.callback = function (response) {
-      if (response && response.access_token) {
-        copyAccessToken = response.access_token;
-        copyTokenExpiresAt = Date.now() + ((response.expires_in || 3600) * 1000);
-        resolve(copyAccessToken);
-      } else {
-        reject(new Error('Không nhận được quyền truy cập Google Drive.'));
-      }
-    };
-    copyTokenClient.error_callback = function (err) {
-      reject(new Error((err && err.type) || 'Đăng nhập/cấp quyền Google Drive thất bại hoặc bị huỷ.'));
-    };
-    try {
-      // Mặc định luôn hiện màn hình chọn tài khoản (select_account) - vì
-      // thao tác này CẦN đăng nhập ĐÚNG tài khoản ĐÍCH, có thể khác với
-      // tài khoản đã đăng nhập cho tính năng Đồng bộ Drive (JSON) ở trên.
-      copyTokenClient.requestAccessToken(promptMode === undefined ? { prompt: 'select_account' } : { prompt: promptMode });
-    } catch (e) { reject(e); }
-  });
-}
-
-async function copyApiFetch(url, options) {
-  const opts = Object.assign({}, options || {});
-  opts.headers = Object.assign({}, opts.headers, { Authorization: 'Bearer ' + copyAccessToken });
-  const res = await fetch(url, opts);
-  if (!res.ok) {
-    let msg = 'HTTP ' + res.status;
-    try { const j = await res.json(); msg = (j && j.error && j.error.message) || msg; } catch (e) { /* ignore */ }
-    throw new Error(msg);
-  }
-  return res;
-}
-
-async function copyFileToFolder(fileId, destFolderId, name) {
-  const body = { parents: [destFolderId] };
-  if (name) body.name = name;
-  const res = await copyApiFetch(
-    'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fileId) + '/copy?fields=id,name',
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-  );
-  return res.json();
-}
-
-// sourceAcc/destAcc: {label, apiKey, folderLink}. onProgress(evt) được gọi
-// liên tục để cập nhật UI - evt.phase: 'login' | 'listing' | 'copying' | 'done'.
-// Trả về { total, copied, skipped, errors[] }.
-async function syncFolderContents(sourceAcc, destAcc, onProgress) {
-  const notify = onProgress || function () {};
-  const sourceFolderId = extractFolderId(sourceAcc.folderLink);
-  const destFolderId = extractFolderId(destAcc.folderLink);
-  if (!sourceAcc.apiKey || !sourceFolderId) throw new Error('Tài khoản nguồn thiếu API Key hoặc link folder.');
-  if (!destFolderId) throw new Error('Tài khoản đích thiếu link folder.');
-  if (sourceFolderId === destFolderId) throw new Error('Folder nguồn và đích đang trùng nhau.');
-
-  notify({ phase: 'listing' });
-  const sourceFiles = await listFolderFiles(sourceAcc.apiKey, sourceFolderId);
-  let destFiles = [];
-  try {
-    // Ưu tiên đọc danh sách đích bằng API Key (nếu có) để khỏi cần đăng
-    // nhập chỉ để kiểm tra file nào đã có sẵn - đỡ 1 bước xin quyền.
-    if (destAcc.apiKey) destFiles = await listFolderFiles(destAcc.apiKey, destFolderId);
-  } catch (e) { /* folder đích có thể riêng tư/không đọc được bằng key - bỏ qua, coi như trống */ }
-  const destNames = new Set(destFiles.map(function (f) { return f.name; }));
-
-  const toCopy = sourceFiles.filter(function (f) { return !destNames.has(f.name); });
-  if (toCopy.length === 0) {
-    notify({ phase: 'done', total: 0, done: 0, errors: [] });
-    return { total: 0, copied: 0, skipped: sourceFiles.length, errors: [] };
-  }
-
-  notify({ phase: 'login' });
-  await requestCopyAccessToken('select_account');
-
-  const errors = [];
-  let done = 0;
-  const total = toCopy.length;
-  for (const f of toCopy) {
-    notify({ phase: 'copying', done: done, total: total, name: f.name });
-    try {
-      await copyFileToFolder(f.id, destFolderId, f.name);
-    } catch (e) {
-      errors.push(f.name + ': ' + (e.message || String(e)));
-    }
-    done++;
-  }
-  notify({ phase: 'done', total: total, done: done, errors: errors });
-  return { total: total, copied: total - errors.length, skipped: sourceFiles.length - toCopy.length, errors: errors };
-}
-
 
 // rồi GỘP các video trùng TÊN PHIM (bỏ dấu, không phân biệt hoa/thường)
 // thành 1 mục duy nhất có nhiều "nguồn" (sources). Khi phát, app sẽ thử
@@ -1137,7 +567,7 @@ async function fetchFolderVideos(accounts) {
       continue;
     }
 
-    const videoFiles = files.filter(isPlayableMediaFile);
+    const videoFiles = files.filter(isManagedFile);
     const subtitleFiles = files.filter(isSubtitleFile);
     const subtitleByBase = {};
     subtitleFiles.forEach(function (f) { subtitleByBase[getBaseName(f.name)] = f; });
@@ -1160,7 +590,8 @@ async function fetchFolderVideos(accounts) {
           key: key,
           originalTitle: baseName,
           mimeType: f.mimeType || '',
-          mediaType: isAudioFile(f) ? 'audio' : 'video',
+          mediaType: detectMediaType(f),
+          fileSize: f.size ? Number(f.size) : null,
           thumbnail: f.thumbnailLink || null,
           createdTime: f.createdTime || null,
           sources: [source]
@@ -1366,7 +797,7 @@ if (bulkHideBtn) {
   });
 }
 
-// ---------------- Cấu hình nhiều tài khoản (dòng động trong modal) ----------------
+// ---------------- Cấu hình tài khoản Drive (hiển thị trong modal) ----------------
 
 let accountDraftRows = []; // [{label, apiKey, folderLink}] đang chỉnh trong modal, chưa lưu
 
@@ -1380,8 +811,6 @@ function switchSettingsTab(name) {
     panel.classList.toggle('hidden', panel.dataset.settingsPanel !== name);
   });
   if (name === 'backup') renderBackupStats();
-  if (name === 'sync') updateSyncStatusUI();
-  if (name === 'accounts') populateFolderSyncSelects();
 }
 
 document.getElementById('settingsTabs')?.addEventListener('click', function (e) {
@@ -1444,342 +873,6 @@ document.getElementById('importConfigInput')?.addEventListener('change', functio
   reader.readAsText(file);
 });
 
-// ================= ACCOUNT SETUP WIZARD =================
-const accountWizard = document.getElementById('accountWizard');
-const closeAccountWizardBtn = document.getElementById('closeAccountWizardBtn');
-const wizardGoogleAccount = document.getElementById('wizardGoogleAccount');
-const wizardAccountLabel = document.getElementById('wizardAccountLabel');
-const wizardFolderAccountLabel = document.getElementById('wizardFolderAccountLabel');
-const wizardApiKey = document.getElementById('wizardApiKey');
-const wizardApiStatus = document.getElementById('wizardApiStatus');
-const wizardFolderLink = document.getElementById('wizardFolderLink');
-const wizardAccountLabelInput = document.getElementById('wizardAccountLabelInput');
-const wizardFolderStatus = document.getElementById('wizardFolderStatus');
-const wizardStep5Next = document.getElementById('wizardStep5Next');
-const wizardSummary = document.getElementById('wizardSummary');
-
-let accountWizardStep = 1;
-let accountWizardData = {
-  googleAccount: '',
-  label: '',
-  apiKey: '',
-  folderLink: '',
-  folderOk: false,
-  videoCount: 0
-};
-
-function wizardShowStep(step) {
-  accountWizardStep = step;
-  accountWizard.querySelectorAll('.wizard-panel').forEach(function(p) {
-    p.classList.toggle('hidden', Number(p.dataset.panel) !== step);
-  });
-  accountWizard.querySelectorAll('[data-wstep]').forEach(function(p) {
-    const n = Number(p.dataset.wstep);
-    p.classList.toggle('active', n === step);
-    p.classList.toggle('done', n < step);
-  });
-}
-
-function openAccountWizard() {
-  accountWizardData = { googleAccount:'', label:'', apiKey:'', folderLink:'', folderOk:false, videoCount:0 };
-  wizardGoogleAccount.value = '';
-  wizardApiKey.value = '';
-  wizardAccountLabelInput.value = '';
-  wizardFolderLink.value = '';
-  wizardApiStatus.textContent = '';
-  wizardFolderStatus.textContent = '';
-  const fcd = document.getElementById('wizardFolderCreatedDone'); if (fcd) fcd.checked = false;
-  const fsd = document.getElementById('wizardFolderSharedDone'); if (fsd) fsd.checked = false;
-  const copyBox = document.getElementById('wizardCopyBox'); if (copyBox) copyBox.classList.add('hidden');
-  const copyStatus = document.getElementById('wizardCopyStatus'); if (copyStatus) copyStatus.textContent = '';
-  const quickName = document.getElementById('wizardQuickFolderName'); if (quickName) quickName.value = 'Phim';
-  const quickStatus = document.getElementById('wizardQuickStatus'); if (quickStatus) quickStatus.textContent = '';
-  const consentDone = document.getElementById('wizardConsentOpenedDone'); if (consentDone) consentDone.checked = false;
-  const testUserDone = document.getElementById('wizardTestUserAddedDone'); if (testUserDone) testUserDone.checked = false;
-  const testLoginStatus = document.getElementById('wizardTestLoginStatus'); if (testLoginStatus) testLoginStatus.textContent = '';
-  wizardStep5Next.disabled = true;
-  wizardShowStep(1);
-  accountWizard.classList.remove('hidden');
-  wizardGoogleAccount.focus();
-  accountWizard.scrollIntoView({behavior:'smooth', block:'nearest'});
-}
-
-function closeAccountWizard() {
-  accountWizard.classList.add('hidden');
-}
-
-document.getElementById('addAccountBtn')?.addEventListener('click', openAccountWizard);
-closeAccountWizardBtn?.addEventListener('click', closeAccountWizard);
-
-document.getElementById('wizardStep1Next')?.addEventListener('click', function() {
-  const email = wizardGoogleAccount.value.trim();
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    toast('Vui lòng nhập đúng Google Account/Gmail của tài khoản mới.', 'err');
-    return;
-  }
-  accountWizardData.googleAccount = email;
-  wizardAccountLabel.textContent = email;
-  wizardFolderAccountLabel.textContent = email;
-  ['wizardTestUserAccountLabel', 'wizardTestUserAccountLabel2', 'wizardTestUserAccountLabel3', 'wizardQuickAccountLabel', 'wizardQuickAccountLabel2'].forEach(function (id) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = email;
-  });
-  wizardShowStep(2);
-});
-
-document.getElementById('wizardCloudBtn')?.addEventListener('click', function() {
-  window.open('https://console.cloud.google.com/', '_blank', 'noopener,noreferrer');
-});
-document.getElementById('wizardProjectBtn')?.addEventListener('click', function() {
-  window.open('https://console.cloud.google.com/projectcreate', '_blank', 'noopener,noreferrer');
-});
-document.getElementById('wizardStep2Next')?.addEventListener('click', function() {
-  if (!document.getElementById('wizardProjectDone').checked) {
-    toast('Hãy xác nhận bạn đã chọn/tạo Project bằng Google Account mới.', 'err');
-    return;
-  }
-  wizardShowStep(3);
-});
-document.getElementById('wizardDriveApiBtn')?.addEventListener('click', function() {
-  window.open('https://console.cloud.google.com/apis/library/drive.googleapis.com', '_blank', 'noopener,noreferrer');
-});
-document.getElementById('wizardStep3Next')?.addEventListener('click', function() {
-  if (!document.getElementById('wizardDriveApiDone').checked) {
-    toast('Hãy xác nhận Google Drive API đã được bật.', 'err');
-    return;
-  }
-  wizardShowStep(4);
-});
-document.getElementById('wizardCredentialsBtn')?.addEventListener('click', function() {
-  window.open('https://console.cloud.google.com/apis/credentials', '_blank', 'noopener,noreferrer');
-});
-document.getElementById('wizardStep4Next')?.addEventListener('click', function() {
-  const key = wizardApiKey.value.trim();
-  if (!key || key.length < 20) {
-    wizardApiStatus.textContent = '⚠ API Key chưa được nhập đầy đủ.';
-    return;
-  }
-  accountWizardData.apiKey = key;
-  wizardApiStatus.textContent = '✓ Đã nhận API Key. Key này sẽ được lưu riêng cho ' + accountWizardData.googleAccount + '.';
-  wizardShowStep(5);
-});
-
-document.getElementById('wizardOpenDriveBtn')?.addEventListener('click', function() {
-  window.open('https://drive.google.com/drive/my-drive', '_blank', 'noopener,noreferrer');
-});
-
-document.getElementById('wizardOpenConsentBtn')?.addEventListener('click', function() {
-  // Số project được lấy từ chính OAUTH_CLIENT_ID (phần trước dấu "-") để
-  // Google Cloud Console tự mở đúng project sở hữu OAuth client này.
-  const projectNumber = (OAUTH_CLIENT_ID.split('-')[0] || '').trim();
-  const url = projectNumber
-    ? 'https://console.cloud.google.com/apis/credentials/consent?project=' + encodeURIComponent(projectNumber)
-    : 'https://console.cloud.google.com/apis/credentials/consent';
-  window.open(url, '_blank', 'noopener,noreferrer');
-});
-
-document.getElementById('wizardTestLoginBtn')?.addEventListener('click', async function () {
-  const statusEl = document.getElementById('wizardTestLoginStatus');
-  this.disabled = true;
-  if (statusEl) statusEl.textContent = '⏳ Đang mở màn hình đăng nhập Google - hãy chọn đúng account ' + (accountWizardData.googleAccount || 'mới') + '...';
-  try {
-    await requestCopyAccessToken('select_account');
-    if (statusEl) statusEl.textContent = '✓ Đăng nhập thành công! Account này đã dùng được nút "⚡ Tự tạo folder + Đồng bộ ngay" và "Copy video từ" bên dưới rồi.';
-  } catch (err) {
-    const msg = (err && err.message) || String(err);
-    if (statusEl) {
-      if (/access_denied|disallowed|blocked/i.test(msg)) {
-        statusEl.textContent = '✗ Vẫn bị chặn (access_denied). Hãy kiểm tra lại: (1) Bước B mở ĐÚNG project bằng ĐÚNG account gốc, (2) Bước C đã Save đúng email ' + (accountWizardData.googleAccount || '') + ' vào Test users chưa. Google có thể mất 1-2 phút để cập nhật - đợi rồi bấm kiểm tra lại.';
-      } else if (/popup_closed|closed the popup|user did not/i.test(msg)) {
-        statusEl.textContent = '⚠ Cửa sổ đăng nhập bị đóng trước khi hoàn tất - hãy bấm lại nút này, chọn tài khoản và bấm Cho phép đến cùng.';
-      } else {
-        statusEl.textContent = '✗ Lỗi: ' + msg + ' - hãy thử bấm lại, hoặc kiểm tra lại các Bước A-C ở trên.';
-      }
-    }
-  } finally {
-    this.disabled = false;
-  }
-});
-
-document.getElementById('wizardCheckFolderBtn')?.addEventListener('click', async function() {
-  if (!document.getElementById('wizardFolderCreatedDone').checked) {
-    wizardFolderStatus.textContent = '⚠ Hãy xác nhận bạn đã tạo folder mới trên Drive.';
-    return;
-  }
-  if (!document.getElementById('wizardFolderSharedDone').checked) {
-    wizardFolderStatus.textContent = '⚠ Hãy xác nhận bạn đã chia sẻ folder "Bất kỳ ai có đường liên kết" và chọn quyền phù hợp.';
-    return;
-  }
-  const label = wizardAccountLabelInput.value.trim();
-  const folder = wizardFolderLink.value.trim();
-  if (!label) {
-    wizardFolderStatus.textContent = '⚠ Hãy nhập tên hiển thị cho account.';
-    return;
-  }
-  if (!folder) {
-    wizardFolderStatus.textContent = '⚠ Hãy nhập link folder Google Drive.';
-    return;
-  }
-  wizardFolderStatus.textContent = '⏳ Đang kiểm tra folder...';
-  wizardStep5Next.disabled = true;
-
-  try {
-    const folderId = extractFolderId(folder);
-    const files = await listFolderFiles(accountWizardData.apiKey, folderId);
-    const count = files.filter(isPlayableMediaFile).length;
-    accountWizardData.label = label;
-    accountWizardData.folderLink = folder;
-    accountWizardData.folderOk = true;
-    accountWizardData.videoCount = count;
-    wizardFolderStatus.textContent = '✓ OK — tìm thấy ' + count + ' video trong folder.';
-    wizardStep5Next.disabled = false;
-    const copyBox = document.getElementById('wizardCopyBox');
-    if (copyBox) { copyBox.classList.remove('hidden'); populateFolderSyncSelects(); }
-  } catch (err) {
-    wizardFolderStatus.textContent = '✗ Không quét được folder: ' + (err?.message || String(err));
-  }
-});
-
-document.getElementById('wizardQuickAutoBtn')?.addEventListener('click', async function () {
-  const statusEl = document.getElementById('wizardQuickStatus');
-  const nameInput = document.getElementById('wizardQuickFolderName');
-  const srcSel = document.getElementById('wizardQuickSourceSelect');
-  const accounts = getAccounts();
-  const sourceIdx = srcSel ? Number(srcSel.value) : NaN;
-  const hasSource = Number.isInteger(sourceIdx) && !!accounts[sourceIdx];
-
-  if (!accountWizardData.apiKey) {
-    if (statusEl) statusEl.textContent = '⚠ Hãy hoàn tất bước 4 (API Key) trước khi dùng cách nhanh này.';
-    return;
-  }
-  const label = wizardAccountLabelInput.value.trim();
-  if (!label) {
-    if (statusEl) statusEl.textContent = '⚠ Hãy nhập "Tên hiển thị" ở ô bên dưới (phần thủ công) trước, rồi bấm lại nút này.';
-    wizardAccountLabelInput.focus();
-    return;
-  }
-  const folderName = nameInput.value.trim() || 'Phim';
-
-  this.disabled = true;
-  try {
-    statusEl.textContent = '⏳ Đang mở màn hình đăng nhập - hãy chọn đúng tài khoản MỚI (' + accountWizardData.googleAccount + ')...';
-    await requestCopyAccessToken('select_account');
-
-    statusEl.textContent = '⏳ Đang tự tạo folder "' + folderName + '" giống folder gốc...';
-    const folderRes = await copyApiFetch(
-      'https://www.googleapis.com/drive/v3/files?fields=id',
-      { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: folderName, mimeType: 'application/vnd.google-apps.folder' }) }
-    );
-    const folder = await folderRes.json();
-
-    statusEl.textContent = '⏳ Đang tự chia sẻ "Bất kỳ ai có đường liên kết"...';
-    await copyApiFetch(
-      'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(folder.id) + '/permissions',
-      { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: 'reader', type: 'anyone' }) }
-    );
-
-    const folderLink = 'https://drive.google.com/drive/folders/' + folder.id;
-    wizardFolderLink.value = folderLink;
-    const fcd = document.getElementById('wizardFolderCreatedDone'); if (fcd) fcd.checked = true;
-    const fsd = document.getElementById('wizardFolderSharedDone'); if (fsd) fsd.checked = true;
-
-    accountWizardData.label = label;
-    accountWizardData.folderLink = folderLink;
-    accountWizardData.folderOk = true;
-    accountWizardData.videoCount = 0;
-
-    const copyBox = document.getElementById('wizardCopyBox');
-    if (copyBox) { copyBox.classList.remove('hidden'); populateFolderSyncSelects(); }
-
-    if (hasSource) {
-      const destAcc = { label: label, apiKey: accountWizardData.apiKey, folderLink: folderLink };
-      await runFolderSyncUI(accounts[sourceIdx], destAcc, statusEl, null);
-    } else {
-      statusEl.textContent = '✓ Đã tự tạo & chia sẻ folder "' + folderName + '". Chưa có tài khoản nguồn nào để copy - có thể copy sau ở ô "Copy video từ" bên dưới.';
-    }
-
-    try {
-      const files = await listFolderFiles(accountWizardData.apiKey, extractFolderId(folderLink));
-      accountWizardData.videoCount = files.filter(isPlayableMediaFile).length;
-    } catch (e) { /* folder vừa tạo, key mới có thể cần vài giây để lập chỉ mục - bỏ qua */ }
-    wizardFolderStatus.textContent = '✓ OK — folder tự tạo, hiện có ' + accountWizardData.videoCount + ' video.';
-    wizardStep5Next.disabled = false;
-  } catch (err) {
-    statusEl.textContent = '✗ Lỗi: ' + (err.message || String(err));
-  } finally {
-    this.disabled = false;
-  }
-});
-
-document.getElementById('wizardCopyStartBtn')?.addEventListener('click', async function () {
-  const statusEl = document.getElementById('wizardCopyStatus');
-  const sel = document.getElementById('wizardCopySourceSelect');
-  const accounts = getAccounts();
-  const sourceIdx = sel ? Number(sel.value) : NaN;
-  if (!accountWizardData.folderOk) {
-    if (statusEl) statusEl.textContent = '⚠ Hãy "🔍 Kiểm tra folder" ở trên trước.';
-    return;
-  }
-  if (!Number.isInteger(sourceIdx) || !accounts[sourceIdx]) {
-    if (statusEl) statusEl.textContent = '⚠ Chưa có tài khoản nào để copy từ đó - hãy thêm ít nhất 1 tài khoản trước.';
-    return;
-  }
-  const destAcc = { label: accountWizardData.label, apiKey: accountWizardData.apiKey, folderLink: accountWizardData.folderLink };
-  await runFolderSyncUI(accounts[sourceIdx], destAcc, statusEl, this);
-  // Sau khi copy xong, quét lại folder đích để cập nhật số video hiển thị ở bước tóm tắt.
-  try {
-    const files = await listFolderFiles(accountWizardData.apiKey, extractFolderId(accountWizardData.folderLink));
-    accountWizardData.videoCount = files.filter(isPlayableMediaFile).length;
-    wizardFolderStatus.textContent = '✓ OK — hiện có ' + accountWizardData.videoCount + ' video trong folder.';
-  } catch (e) { /* bỏ qua - không quét lại được thì vẫn giữ số cũ */ }
-});
-
-document.getElementById('wizardStep5Next')?.addEventListener('click', function() {
-  if (!accountWizardData.folderOk) return;
-  wizardSummary.innerHTML =
-    '<div><b>Google Account:</b> ' + escapeHtml(accountWizardData.googleAccount) + '</div>' +
-    '<div><b>Tên:</b> ' + escapeHtml(accountWizardData.label) + '</div>' +
-    '<div><b>API Key:</b> ' + escapeHtml(accountWizardData.apiKey.slice(0,8)) + '••••••••</div>' +
-    '<div><b>Folder:</b> ' + escapeHtml(accountWizardData.folderLink) + '</div>' +
-    '<div><b>Video tìm thấy:</b> ' + accountWizardData.videoCount + '</div>';
-  wizardShowStep(6);
-});
-
-document.getElementById('wizardFinishBtn')?.addEventListener('click', function() {
-  const newAccount = {
-    googleAccount: accountWizardData.googleAccount,
-    label: accountWizardData.label,
-    apiKey: accountWizardData.apiKey,
-    folderLink: accountWizardData.folderLink
-  };
-
-  // Wizard hoàn tất là LƯU THẬT ngay, không còn trạng thái nháp.
-  const existing = getAccounts().filter(function(a) {
-    return (a.googleAccount || '').toLowerCase() !== newAccount.googleAccount.toLowerCase();
-  });
-  try {
-    saveAccounts(existing.concat([newAccount]));
-    accountDraftRows = getAccounts().map(function(a) {
-      return {
-        googleAccount: a.googleAccount || '',
-        label: a.label || '',
-        apiKey: a.apiKey || '',
-        folderLink: a.folderLink || ''
-      };
-    });
-    closeAccountWizard();
-    renderAccountRows();
-    populateFolderSyncSelects();
-    showScreen('grid');
-    loadVideos();
-    toast('✓ Đã lưu vĩnh viễn account ' + newAccount.googleAccount + ' trên trình duyệt này.', 'ok');
-  } catch (err) {
-    toast('✗ Không lưu được account: ' + (err.message || String(err)), 'err');
-  }
-});
-
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, function(ch) {
     return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]);
@@ -1805,7 +898,7 @@ function renderAccountRows() {
 
     const googleInput = document.createElement('input');
     googleInput.type = 'email';
-    googleInput.placeholder = 'Google Account (vd. minhvukgh1977@gmail.com)';
+    googleInput.placeholder = 'Google Account (vd. minhvukgh1979@gmail.com)';
     googleInput.value = row.googleAccount || '';
     googleInput.setAttribute('tabindex', '0');
     googleInput.addEventListener('input', function () { row.googleAccount = googleInput.value; });
@@ -1871,114 +964,15 @@ function renderAccountRows() {
     checkRow.appendChild(checkBtn);
     checkRow.appendChild(checkStatus);
 
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'btn account-remove';
-    removeBtn.textContent = '✕';
-    removeBtn.title = 'Xoá tài khoản này';
-    removeBtn.setAttribute('tabindex', '0');
-    removeBtn.addEventListener('click', function () {
-      accountDraftRows.splice(idx, 1);
-      if (accountDraftRows.length === 0) accountDraftRows.push({ googleAccount: '', label: '', apiKey: '', folderLink: '' });
-      renderAccountRows();
-    });
-
     div.appendChild(labelWrap);
     div.appendChild(googleInput);
     div.appendChild(labelInput);
     div.appendChild(keyInput);
     div.appendChild(folderInput);
     div.appendChild(checkRow);
-    div.appendChild(removeBtn);
     accountsListEl.appendChild(div);
   });
 }
-
-// ---------------- Đồng bộ folder giữa các tài khoản (đổ dữ liệu dropdown) ----------------
-
-function populateFolderSyncSelects() {
-  const accounts = getAccounts();
-  const options = accounts.map(function (a, idx) {
-    const label = a.label || a.googleAccount || ('Tài khoản ' + (idx + 1));
-    return { value: String(idx), label: label };
-  });
-
-  function fill(select, placeholder) {
-    if (!select) return;
-    const prevValue = select.value;
-    select.innerHTML = '';
-    if (options.length === 0) {
-      const opt = document.createElement('option');
-      opt.value = '';
-      opt.textContent = placeholder;
-      select.appendChild(opt);
-      select.disabled = true;
-      return;
-    }
-    select.disabled = false;
-    options.forEach(function (o) {
-      const opt = document.createElement('option');
-      opt.value = o.value;
-      opt.textContent = o.label;
-      select.appendChild(opt);
-    });
-    if (options.some(function (o) { return o.value === prevValue; })) select.value = prevValue;
-  }
-
-  fill(document.getElementById('folderSyncSourceSelect'), 'Cần thêm ít nhất 2 tài khoản trước');
-  fill(document.getElementById('folderSyncDestSelect'), 'Cần thêm ít nhất 2 tài khoản trước');
-  // Mặc định chọn 2 dòng khác nhau (nếu có từ 2 tài khoản trở lên) cho tiện.
-  const destSel = document.getElementById('folderSyncDestSelect');
-  if (destSel && options.length > 1 && destSel.value === document.getElementById('folderSyncSourceSelect')?.value) {
-    destSel.value = options[1].value;
-  }
-
-  fill(document.getElementById('wizardCopySourceSelect'), 'Chưa có tài khoản nào để copy từ đó');
-  fill(document.getElementById('wizardQuickSourceSelect'), 'Chưa có tài khoản nào để copy từ đó');
-}
-
-async function runFolderSyncUI(sourceAcc, destAcc, statusEl, startBtn) {
-  if (!sourceAcc || !destAcc) { if (statusEl) statusEl.textContent = '⚠ Hãy chọn đủ tài khoản nguồn và đích.'; return; }
-  if (startBtn) startBtn.disabled = true;
-  try {
-    const result = await syncFolderContents(sourceAcc, destAcc, function (evt) {
-      if (!statusEl) return;
-      if (evt.phase === 'listing') statusEl.textContent = '⏳ Đang quét danh sách file 2 folder...';
-      else if (evt.phase === 'login') statusEl.textContent = '⏳ Đang mở màn hình đăng nhập Google - hãy chọn đúng tài khoản ĐÍCH (' + (destAcc.label || destAcc.googleAccount || 'tài khoản đích') + ')...';
-      else if (evt.phase === 'copying') statusEl.textContent = '⏳ Đang copy ' + (evt.done + 1) + '/' + evt.total + ': ' + evt.name;
-    });
-    if (!statusEl) return;
-    if (result.total === 0) {
-      statusEl.textContent = '✓ Đích đã có đủ, không có file nào cần copy thêm (đã bỏ qua ' + result.skipped + ' file trùng tên).';
-    } else if (result.errors.length === 0) {
-      statusEl.textContent = '✓ Đã copy xong ' + result.copied + '/' + result.total + ' file sang tài khoản đích.';
-    } else {
-      statusEl.textContent = '⚠ Copy xong ' + result.copied + '/' + result.total + ' file - lỗi ' + result.errors.length + ' file: ' + result.errors.slice(0, 3).join('; ') + (result.errors.length > 3 ? '...' : '');
-    }
-  } catch (e) {
-    if (statusEl) statusEl.textContent = '✗ Đồng bộ lỗi: ' + (e.message || String(e));
-  } finally {
-    if (startBtn) startBtn.disabled = false;
-  }
-}
-
-document.getElementById('folderSyncStartBtn')?.addEventListener('click', function () {
-  const accounts = getAccounts();
-  const sourceSel = document.getElementById('folderSyncSourceSelect');
-  const destSel = document.getElementById('folderSyncDestSelect');
-  const statusEl = document.getElementById('folderSyncStatus');
-  const sourceIdx = sourceSel ? Number(sourceSel.value) : NaN;
-  const destIdx = destSel ? Number(destSel.value) : NaN;
-  if (!Number.isInteger(sourceIdx) || !Number.isInteger(destIdx)) {
-    if (statusEl) statusEl.textContent = '⚠ Cần ít nhất 2 tài khoản đã thêm ở trên trước khi đồng bộ.';
-    return;
-  }
-  if (sourceIdx === destIdx) {
-    if (statusEl) statusEl.textContent = '⚠ Hãy chọn 2 tài khoản khác nhau cho nguồn và đích.';
-    return;
-  }
-  runFolderSyncUI(accounts[sourceIdx], accounts[destIdx], statusEl, this);
-});
 
 function openSettings() {
   const accounts = getAccounts();
@@ -1989,7 +983,6 @@ function openSettings() {
   settingsError.textContent = '';
   switchSettingsTab('accounts');
   settingsScreen.classList.remove('hidden');
-  populateFolderSyncSelects();
   const firstInput = accountsListEl.querySelector('input');
   if (firstInput) firstInput.focus();
 }
@@ -2034,7 +1027,6 @@ saveBtn.addEventListener('click', function () {
   try {
     saveAccounts(valid);
     settingsError.textContent = '';
-    populateFolderSyncSelects();
     closeSettings();
     showScreen('grid');
     loadVideos();
@@ -2108,8 +1100,9 @@ function applyFilters() {
   else if (currentTab === 'hidden') list = list.filter(function (v) { return v.hidden; });
   else list = list.filter(function (v) { return !v.hidden; });
 
-  if (currentMediaFilter === 'video') list = list.filter(function (v) { return v.mediaType !== 'audio'; });
+  if (currentMediaFilter === 'video') list = list.filter(function (v) { return v.mediaType !== 'audio' && v.mediaType !== 'apk'; });
   else if (currentMediaFilter === 'audio') list = list.filter(function (v) { return v.mediaType === 'audio'; });
+  else if (currentMediaFilter === 'apk') list = list.filter(function (v) { return v.mediaType === 'apk'; });
 
   if (term) {
     list = list.filter(function (v) { return normalizeForSearch(v.title).includes(term); });
@@ -2141,9 +1134,9 @@ function applyFilters() {
   }
 
   if (allVideos.length === 0) {
-    statusMsg.textContent = 'Không thấy video/nhạc nào trong folder. Kiểm tra lại link folder và quyền chia sẻ.';
+    statusMsg.textContent = 'Không thấy video/nhạc/apk nào trong folder. Kiểm tra lại link folder và quyền chia sẻ.';
   } else {
-    const mediaLabel = currentMediaFilter === 'video' ? ' (phim)' : currentMediaFilter === 'audio' ? ' (nhạc)' : ' (video + nhạc)';
+    const mediaLabel = currentMediaFilter === 'video' ? ' (phim)' : currentMediaFilter === 'audio' ? ' (nhạc)' : currentMediaFilter === 'apk' ? ' (APK)' : ' (video + nhạc + apk)';
     statusMsg.textContent = list.length + ' / ' + allVideos.length + ' mục' + mediaLabel + '.';
   }
 }
@@ -2157,7 +1150,7 @@ function renderContinueWatching(term) {
     return;
   }
   const list = allVideos.map(decorate)
-    .filter(function (v) { return !v.hidden && v.watchedPct > 3 && v.watchedPct < 95 && !v.watchedManual; })
+    .filter(function (v) { return !v.hidden && v.mediaType !== 'apk' && v.watchedPct > 3 && v.watchedPct < 95 && !v.watchedManual; })
     .sort(function (a, b) { return b.progressUpdatedAt - a.progressUpdatedAt; })
     .slice(0, 12);
 
@@ -2222,7 +1215,7 @@ function renderVideos(videos) {
   if (videos.length === 0 && allVideos.length > 0) {
     const empty = document.createElement('div');
     empty.className = 'empty-state';
-    empty.innerHTML = '<span class="empty-emoji">🔍</span>Không tìm thấy video/nhạc phù hợp.';
+    empty.innerHTML = '<span class="empty-emoji">🔍</span>Không tìm thấy mục nào phù hợp.';
     videoGrid.appendChild(empty);
     return;
   }
@@ -2245,12 +1238,14 @@ function renderVideos(videos) {
     }
 
     const isAudio = video.mediaType === 'audio';
+    const isApk = video.mediaType === 'apk';
     if (isAudio) thumbWrap.classList.add('thumb-wrap-audio');
+    if (isApk) thumbWrap.classList.add('thumb-wrap-apk');
 
     const img = document.createElement('img');
     img.className = 'thumb';
     img.alt = video.title;
-    if (video.thumbnail) {
+    if (video.thumbnail && !isApk) {
       img.src = video.thumbnail;
       img.onerror = function () { img.style.background = '#37474f'; img.removeAttribute('src'); };
     } else {
@@ -2265,7 +1260,18 @@ function renderVideos(videos) {
       thumbWrap.appendChild(audioIcon);
     }
 
-    if (video.sources.some(function (s) { return s.subtitleFileId; })) {
+    if (isApk) {
+      const apkIcon = document.createElement('span');
+      apkIcon.className = 'apk-note-icon';
+      apkIcon.textContent = '📦';
+      thumbWrap.appendChild(apkIcon);
+      const apkBadge = document.createElement('span');
+      apkBadge.className = 'badge badge-apk';
+      apkBadge.textContent = 'APK' + (video.fileSize ? ' · ' + formatFileSize(video.fileSize) : '');
+      thumbWrap.appendChild(apkBadge);
+    }
+
+    if (!isApk && video.sources.some(function (s) { return s.subtitleFileId; })) {
       const ccBadge = document.createElement('span');
       ccBadge.className = 'badge badge-cc';
       ccBadge.textContent = 'CC';
@@ -2292,13 +1298,13 @@ function renderVideos(videos) {
       favBadge.textContent = '★';
       thumbWrap.appendChild(favBadge);
     }
-    if (video.watchedManual || video.watchedPct >= 95) {
+    if (!isApk && (video.watchedManual || video.watchedPct >= 95)) {
       const watchedBadge = document.createElement('span');
       watchedBadge.className = 'badge badge-watched';
       watchedBadge.textContent = '✓ Đã xem';
       thumbWrap.appendChild(watchedBadge);
     }
-    if (video.watchedPct > 3 && video.watchedPct < 95) {
+    if (!isApk && video.watchedPct > 3 && video.watchedPct < 95) {
       const sliver = document.createElement('div');
       sliver.className = 'progress-sliver';
       sliver.style.width = video.watchedPct + '%';
@@ -2314,7 +1320,8 @@ function renderVideos(videos) {
 
     const desc = document.createElement('div');
     desc.className = 'desc';
-    desc.textContent = (video.watchedManual || video.watchedPct >= 95) ? 'Đã xem xong' :
+    desc.textContent = isApk ? 'Nhấn để tải file APK về máy' :
+      (video.watchedManual || video.watchedPct >= 95) ? 'Đã xem xong' :
       (video.watchedPct > 3 ? 'Đã xem ' + video.watchedPct + '%' : 'Nhấn để phát');
 
     info.appendChild(title);
@@ -2370,7 +1377,8 @@ function renderVideos(videos) {
         applyFilters();
         return;
       }
-      openPlayer(video);
+      if (isApk) downloadApk(video);
+      else openPlayer(video);
     });
     card.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); card.click(); }
@@ -2689,6 +1697,51 @@ function renderQueuePanel() {
 
     queueList.appendChild(row);
   });
+}
+
+// ---------------- Tải file APK về máy để cài đặt ----------------
+// Không phát được như video/nhạc - bấm vào là tải thẳng file .apk về
+// máy (qua chính trang này nên service worker vẫn chèn được token đăng
+// nhập Google nếu có), xong thì mở file .apk vừa tải để cài như bình
+// thường trên Android.
+const apkDownloading = new Set();
+
+async function downloadApk(video) {
+  if (apkDownloading.has(video.key)) return;
+  const sources = video.sources || [];
+  if (sources.length === 0) {
+    toast('Không tìm thấy nguồn file APK.', 'err');
+    return;
+  }
+
+  apkDownloading.add(video.key);
+  const fileName = video.originalTitle.replace(/\.apk$/i, '') + '.apk';
+  toast('⬇ Đang tải ' + fileName + '...', 'ok');
+
+  let lastErr = null;
+  for (let i = 0; i < sources.length; i++) {
+    try {
+      const url = streamUrl(sources[i].fileId, sources[i].apiKey);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(blobUrl); }, 20000);
+      toast('✓ Đã tải xong ' + fileName + ' - mở file để cài đặt.', 'ok');
+      apkDownloading.delete(video.key);
+      return;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  apkDownloading.delete(video.key);
+  toast('Lỗi tải file APK: ' + (lastErr ? lastErr.message : 'không rõ'), 'err');
 }
 
 // Điểm vào khi người dùng bấm mở 1 mục MỚI từ lưới / xem tiếp / tìm kiếm:
@@ -3100,7 +2153,3 @@ if (isConfigured()) {
   openSettings();
 }
 
-// Nếu đã bật Đồng bộ Drive, thử âm thầm kéo bản mới nhất về ngay khi mở
-// app (không chặn màn hình chính - nếu có bản mới hơn sẽ tự áp dụng và
-// tải lại trang 1 lần).
-tryAutoRestoreFromDrive();

@@ -27,7 +27,7 @@
     <div class="toolbar">
       <div class="search-row">
         <span class="search-icon" aria-hidden="true">🔍</span>
-        <input id="searchInput" type="text" tabindex="0" placeholder="Tìm video/nhạc theo tên..." />
+        <input id="searchInput" type="text" tabindex="0" placeholder="Tìm video/nhạc/apk theo tên..." />
         <button id="clearSearchBtn" class="clear-search-btn hidden" type="button" title="Xoá tìm kiếm">✕</button>
       </div>
       <select id="sortSelect" tabindex="0">
@@ -45,10 +45,11 @@
         <button class="tab" data-tab="favorite" tabindex="0">★ Yêu thích</button>
         <button class="tab" data-tab="hidden" tabindex="0">🙈 Đã ẩn</button>
       </div>
-      <div class="media-switch" id="mediaSwitch" role="group" aria-label="Lọc phim hoặc nhạc">
+      <div class="media-switch" id="mediaSwitch" role="group" aria-label="Lọc phim, nhạc hoặc APK">
         <button class="media-switch-btn" type="button" data-media="all" tabindex="0">Tất cả</button>
         <button class="media-switch-btn active" type="button" data-media="video" tabindex="0">🎬 Phim</button>
         <button class="media-switch-btn" type="button" data-media="audio" tabindex="0">🎵 Nhạc</button>
+        <button class="media-switch-btn" type="button" data-media="apk" tabindex="0">📦 APK</button>
       </div>
     </div>
 
@@ -160,7 +161,6 @@
       <div class="settings-tabs" id="settingsTabs">
         <button class="settings-tab active" type="button" data-settings-tab="accounts" tabindex="0">📁 Tài khoản Drive</button>
         <button class="settings-tab" type="button" data-settings-tab="backup" tabindex="0">💾 Sao lưu</button>
-        <button class="settings-tab" type="button" data-settings-tab="sync" tabindex="0">☁️ Đồng bộ Drive</button>
         <button class="settings-tab" type="button" data-settings-tab="shortcuts" tabindex="0">⌨️ Phím tắt</button>
       </div>
 
@@ -168,246 +168,17 @@
 
         <div class="settings-panel-content" data-settings-panel="accounts">
           <p class="hint">
-            Có thể thêm nhiều tài khoản (mỗi tài khoản = 1 folder Drive).
-            Phim trùng tên ở nhiều tài khoản sẽ tự gộp làm 1 — khi 1 tài
-            khoản bị giới hạn (quota), app tự nhảy sang tài khoản khác
-            phát tiếp, không cần chọn lại.
+            Tài khoản Google Drive dùng để lấy video (folder minhvukgh1979).
+            Sửa API Key hoặc link folder bên dưới nếu cần rồi bấm "Lưu cấu hình".
           </p>
 
           <div id="accountsList" class="accounts-list"></div>
 
-          <button id="addAccountBtn" class="btn btn-primary btn-block" type="button" tabindex="0">➕ Thêm tài khoản mới</button>
-
-          <div class="folder-sync-tool">
-            <h3>🔁 Đồng bộ folder giữa các tài khoản</h3>
-            <p class="hint">
-              Copy toàn bộ video (và phụ đề) còn thiếu từ 1 tài khoản
-              (nguồn) sang tài khoản khác (đích) - copy thẳng trên server
-              Google, không tải về máy nên không tốn băng thông. Cần ít
-              nhất 2 tài khoản đã thêm ở trên mới dùng được. Chỉ copy file
-              nào ĐÍCH chưa có (theo tên) - chạy lại nhiều lần vẫn an toàn.
-            </p>
-            <label for="folderSyncSourceSelect">Nguồn (lấy video từ đây):</label>
-            <select id="folderSyncSourceSelect"></select>
-            <label for="folderSyncDestSelect">Đích (copy video vào đây):</label>
-            <select id="folderSyncDestSelect"></select>
-            <button id="folderSyncStartBtn" class="btn api-link-btn" type="button">▶ Bắt đầu đồng bộ</button>
-            <div id="folderSyncStatus" class="wizard-status"></div>
-            <div class="wizard-note">
-              🔐 Ở bước copy, Google sẽ hiện màn hình chọn tài khoản - hãy
-              chọn ĐÚNG tài khoản ĐÍCH (không phải nguồn) và bấm Cho phép,
-              vì việc ghi file vào folder đích bắt buộc phải đăng nhập đúng
-              tài khoản sở hữu folder đó.
-            </div>
-          </div>
-
-          <div id="accountWizard" class="account-wizard hidden">
-            <div class="wizard-head">
-              <div>
-                <strong>➕ Thêm Google Account mới</strong>
-                <div class="wizard-sub">Quy trình này tạo cấu hình riêng cho chính Google Account mới. API Key sẽ lấy từ Google Cloud Project của account đó, không dùng Key của account khác.</div>
-              </div>
-              <button id="closeAccountWizardBtn" class="btn btn-sm" type="button">Đóng</button>
-            </div>
-
-            <div class="wizard-progress">
-              <span data-wstep="1">1. Account</span>
-              <span data-wstep="2">2. Project</span>
-              <span data-wstep="3">3. Drive API</span>
-              <span data-wstep="4">4. API Key</span>
-              <span data-wstep="5">5. Folder</span>
-              <span data-wstep="6">6. Hoàn tất</span>
-            </div>
-
-            <div class="wizard-panel" data-panel="1">
-              <div class="wizard-number">1</div>
-              <h3>Nhập Google Account mới</h3>
-              <p>Nhập Gmail/Google Account mà bạn muốn dùng cho nguồn phim mới.</p>
-              <input id="wizardGoogleAccount" type="email" placeholder="ví dụ: minhvukgh1977@gmail.com" autocomplete="email">
-              <button id="wizardStep1Next" class="btn btn-primary" type="button">Tiếp tục →</button>
-              <div class="wizard-note">⚠ Đây là account sẽ được dùng để tạo/chọn Google Cloud Project và API Key ở các bước sau.</div>
-            </div>
-
-            <div class="wizard-panel hidden" data-panel="2">
-              <div class="wizard-number">2</div>
-              <h3>Mở Google Cloud bằng account mới</h3>
-              <p>Hãy chắc chắn trình duyệt đang đăng nhập đúng: <b id="wizardAccountLabel"></b>.</p>
-              <button id="wizardCloudBtn" class="btn api-link-btn" type="button">↗ Mở Google Cloud</button>
-              <button id="wizardProjectBtn" class="btn api-link-btn" type="button">↗ Tạo Project mới</button>
-              <label class="wizard-check"><input id="wizardProjectDone" type="checkbox"> Tôi đã chọn/tạo Project bằng account mới</label>
-              <button id="wizardStep2Next" class="btn btn-primary" type="button">Tiếp tục →</button>
-            </div>
-
-            <div class="wizard-panel hidden" data-panel="3">
-              <div class="wizard-number">3</div>
-              <h3>Bật Google Drive API</h3>
-              <p>Trong Project vừa tạo/chọn, mở Google Drive API và bấm <b>Enable</b> nếu Google yêu cầu.</p>
-              <button id="wizardDriveApiBtn" class="btn api-link-btn" type="button">↗ Mở Google Drive API</button>
-              <label class="wizard-check"><input id="wizardDriveApiDone" type="checkbox"> Tôi đã bật Google Drive API cho Project này</label>
-              <button id="wizardStep3Next" class="btn btn-primary" type="button">Tiếp tục →</button>
-            </div>
-
-            <div class="wizard-panel hidden" data-panel="4">
-              <div class="wizard-number">4</div>
-              <h3>Tạo API Key cho Project của account mới</h3>
-              <p>Mở Credentials → Create credentials → API key. Sau khi Google hiện Key, copy Key đó.</p>
-              <button id="wizardCredentialsBtn" class="btn api-link-btn" type="button">↗ Mở Credentials</button>
-              <input id="wizardApiKey" type="text" placeholder="Dán API Key mới, ví dụ AIza..." autocomplete="off" spellcheck="false">
-              <button id="wizardStep4Next" class="btn btn-primary" type="button">Kiểm tra Key →</button>
-              <div id="wizardApiStatus" class="wizard-status"></div>
-              <div class="wizard-note">🔐 App không thể tự tạo API Key trong Google Cloud thay bạn. Bạn chỉ cần thực hiện thao tác Create credentials và dán Key vào đây.</div>
-            </div>
-
-            <div class="wizard-panel hidden" data-panel="5">
-              <div class="wizard-number">5</div>
-              <h3>Tạo & chia sẻ Folder Drive cho account mới</h3>
-
-              <div class="wizard-mini-help test-user-note">
-                <h4>🧪 Bắt buộc kiểm tra trước: "Test user" (OAuth)</h4>
-                <p>
-                  Tính năng "⚡ Tự tạo folder", "Copy video từ" và "Đồng bộ
-                  Drive" đều cần đăng nhập Google (OAuth) qua 1 cấu hình
-                  dùng chung của app. Cấu hình này đang ở chế độ
-                  <b>Testing</b>, nên account MỚI (khác account đã tạo ra
-                  app từ đầu) <b>bắt buộc phải được thêm vào Test users</b>
-                  trước, nếu không sẽ gặp lỗi <i>"Đã chặn quyền truy cập...
-                  access_denied"</i>. Làm đủ 4 bước A-D dưới đây 1 lần cho
-                  mỗi account mới là xong, không cần lặp lại lần sau.
-                </p>
-
-                <div class="wizard-mini-help">
-                  <b>Bước A · Xác định tài khoản gốc sở hữu app</b>
-                  <p>
-                    Đây là account Google đã tạo ra Project/OAuth Client
-                    của app này (account bạn dùng đầu tiên khi làm app -
-                    KHÔNG phải account <b id="wizardTestUserAccountLabel3"></b>
-                    đang thêm mới). Nếu không nhớ, thử đăng nhập Cloud
-                    Console lần lượt bằng các account nghi ngờ - account
-                    nào mở được đúng trang ở Bước B và thấy tên app quen
-                    thuộc thì đúng là account đó.
-                  </p>
-                </div>
-
-                <div class="wizard-mini-help">
-                  <b>Bước B · Mở OAuth consent screen (đăng nhập bằng account gốc)</b>
-                  <button id="wizardOpenConsentBtn" class="btn btn-sm api-link-btn" type="button">↗ Mở OAuth consent screen</button>
-                  <label class="wizard-check"><input id="wizardConsentOpenedDone" type="checkbox"> Tôi đã mở đúng trang, bằng đúng account gốc</label>
-                </div>
-
-                <div class="wizard-mini-help">
-                  <b>Bước C · Thêm account mới vào Test users</b>
-                  <p>
-                    Trên trang vừa mở, cuộn xuống mục <b>"Test users"</b> →
-                    bấm <b>"+ ADD USERS"</b> → dán email
-                    <b id="wizardTestUserAccountLabel"></b> vào ô → bấm
-                    <b>Save</b>.
-                  </p>
-                  <label class="wizard-check"><input id="wizardTestUserAddedDone" type="checkbox"> Tôi đã thêm email này vào Test users và bấm Save</label>
-                </div>
-
-                <div class="wizard-mini-help">
-                  <b>Bước D · Kiểm tra đăng nhập thử</b>
-                  <p>
-                    Bấm nút dưới đây, chọn đúng account
-                    <b id="wizardTestUserAccountLabel2"></b> khi Google
-                    hiện màn hình chọn tài khoản, rồi bấm <b>Cho phép</b>.
-                    App sẽ báo ngay kết quả - nếu vẫn lỗi, làm lại đúng
-                    Bước B-C rồi bấm kiểm tra lại (có thể mất 1-2 phút để
-                    Google cập nhật), lặp lại tới khi báo ✓ thành công.
-                  </p>
-                  <button id="wizardTestLoginBtn" class="btn api-link-btn" type="button">🔍 Kiểm tra đăng nhập ngay</button>
-                  <div id="wizardTestLoginStatus" class="wizard-status"></div>
-                </div>
-              </div>
-
-              <div class="wizard-mini-help quick-auto-box">
-                <h4>⚡ Cách nhanh: tự tạo folder giống gốc + tự đồng bộ</h4>
-                <p>
-                  Bỏ qua toàn bộ thao tác thủ công bên dưới - app tự tạo 1
-                  folder mới trên Drive của <b id="wizardQuickAccountLabel"></b>,
-                  tự chia sẻ "Bất kỳ ai có đường liên kết - Người xem", rồi
-                  tự copy toàn bộ video (kèm phụ đề) từ tài khoản nguồn bạn
-                  chọn sang folder đó - xong tự điền link + tự tick 2 ô xác
-                  nhận bên dưới giúp bạn.
-                </p>
-                <label for="wizardQuickFolderName">Tên folder mới sẽ tạo:</label>
-                <input id="wizardQuickFolderName" type="text" placeholder="Vd. Phim" value="Phim">
-                <label for="wizardQuickSourceSelect">Copy video từ (tài khoản nguồn, có thể bỏ qua):</label>
-                <select id="wizardQuickSourceSelect"></select>
-                <div class="wizard-note">
-                  ⓘ Nhớ nhập <b>"Tên hiển thị"</b> ở phần thủ công bên dưới
-                  trước khi bấm nút này.
-                </div>
-                <button id="wizardQuickAutoBtn" class="btn btn-primary" type="button">⚡ Tự tạo folder + Đồng bộ ngay</button>
-                <div id="wizardQuickStatus" class="wizard-status"></div>
-                <div class="wizard-note">
-                  🔐 Google sẽ hiện màn hình chọn tài khoản - hãy chọn đúng
-                  tài khoản <b>MỚI</b> (<b id="wizardQuickAccountLabel2"></b>)
-                  và bấm Cho phép.
-                </div>
-              </div>
-
-              <div class="wizard-divider">— hoặc tự làm thủ công —</div>
-
-              <p>Tạo 1 folder Drive mới ngay trên Drive của <b id="wizardFolderAccountLabel"></b> để chứa video của account này.</p>
-              <button id="wizardOpenDriveBtn" class="btn api-link-btn" type="button">↗ Mở Google Drive</button>
-              <div class="wizard-mini-help">
-                Trong Drive: bấm <b>+ Mới</b> → <b>Thư mục mới</b> → đặt tên tuỳ ý
-                (ví dụ "Phim - Account 2") → <b>Tạo</b>.
-              </div>
-              <label class="wizard-check"><input id="wizardFolderCreatedDone" type="checkbox"> Tôi đã tạo xong folder mới</label>
-
-              <div class="wizard-mini-help">
-                Chuột phải vào folder vừa tạo → <b>Chia sẻ</b> → đổi thành
-                <b>"Bất kỳ ai có đường liên kết"</b>, rồi chọn quyền phù hợp:
-                <ul>
-                  <li><b>Người xem</b>: chỉ xem/phát video qua app. An toàn hơn -
-                      không ai (kể cả bạn từ máy khác) thêm/xoá được file trực
-                      tiếp trên Drive nếu không đăng nhập đúng account này.</li>
-                  <li><b>Người chỉnh sửa</b>: cho phép thêm/xoá video trực tiếp
-                      trên Drive (web, app điện thoại...) từ bất kỳ máy nào có
-                      link, không cần mở app này để upload.</li>
-                </ul>
-                Chọn <b>Người chỉnh sửa</b> nếu muốn tiện thêm video từ nhiều máy;
-                chọn <b>Người xem</b> nếu chỉ cần xem, muốn an toàn hơn.
-              </div>
-              <label class="wizard-check"><input id="wizardFolderSharedDone" type="checkbox"> Tôi đã chia sẻ "Bất kỳ ai có đường liên kết" và chọn quyền phù hợp</label>
-
-              <label for="wizardFolderLink">Copy link folder vừa chia sẻ, dán vào đây:</label>
-              <input id="wizardAccountLabelInput" type="text" placeholder="Tên hiển thị, ví dụ Account 1977">
-              <input id="wizardFolderLink" type="url" placeholder="https://drive.google.com/drive/folders/...">
-              <button id="wizardCheckFolderBtn" class="btn api-link-btn" type="button">🔍 Kiểm tra folder</button>
-              <div id="wizardFolderStatus" class="wizard-status"></div>
-
-              <div id="wizardCopyBox" class="wizard-mini-help hidden">
-                Folder này còn trống hoặc thiếu phim? Có thể copy thẳng
-                toàn bộ video từ 1 tài khoản đã có sẵn (vd. tài khoản gốc)
-                sang đây - copy trên server Google, không cần tải xuống.
-                <label for="wizardCopySourceSelect">Copy video từ:</label>
-                <select id="wizardCopySourceSelect"></select>
-                <button id="wizardCopyStartBtn" class="btn api-link-btn" type="button">▶ Copy vào folder này</button>
-                <div id="wizardCopyStatus" class="wizard-status"></div>
-              </div>
-
-              <button id="wizardStep5Next" class="btn btn-primary" type="button" disabled>Tiếp tục →</button>
-            </div>
-
-            <div class="wizard-panel hidden" data-panel="6">
-              <div class="wizard-number">✓</div>
-              <h3>Hoàn tất account mới</h3>
-              <div id="wizardSummary" class="wizard-summary"></div>
-              <button id="wizardFinishBtn" class="btn btn-primary" type="button">✓ Thêm account này vào app</button>
-              <div class="wizard-note">✓ Account này sẽ được lưu ngay trên máy này, dùng được luôn.</div>
-            </div>
-          </div>
-
           <p class="hint">
-            Mỗi folder phải để chia sẻ "Bất kỳ ai có đường liên kết - Người
-            xem". Muốn tính năng dự phòng hoạt động, các tài khoản nên chứa
-            video CÙNG TÊN file (không cần y hệt 100%, chỉ cần trùng phần
-            tên trước đuôi mở rộng). Nếu có file phụ đề (.srt) cùng tên với
-            video, phụ đề sẽ tự động gắn vào khi phát. Bấm phím <b>M</b> bất
-            cứ lúc nào để mở lại màn hình này.
+            Folder phải để chia sẻ "Bất kỳ ai có đường liên kết - Người
+            xem". Nếu có file phụ đề (.srt) cùng tên với video, phụ đề sẽ
+            tự động gắn vào khi phát. Bấm phím <b>M</b> bất cứ lúc nào để
+            mở lại màn hình này.
           </p>
         </div>
 
@@ -427,88 +198,6 @@
             <input id="importConfigInput" type="file" accept="application/json" class="hidden">
           </div>
           <p id="backupMsg" class="hint"></p>
-        </div>
-
-        <div class="settings-panel-content hidden" data-settings-panel="sync">
-          <p class="hint">
-            Tự động lưu file sao lưu (giống hệt file .json ở tab "Sao lưu")
-            lên 1 folder Google Drive. Mặc định app đã trỏ sẵn vào tài
-            khoản/folder cấu hình từ đầu - <b>không cần làm gì thêm</b>, mở
-            trang trên máy/TV nào (kể cả lần đầu tiên) cũng tự đọc được
-            ngay bằng API Key, không cần đăng nhập. Chỉ khi bạn bấm
-            <b>"🔄 Đồng bộ ngay"</b> để GHI bản mới lên Drive thì mới cần
-            đăng nhập Google 1 lần/máy (đây là giới hạn bảo mật của
-            Google - API Key không bao giờ có quyền ghi).
-          </p>
-
-          <div id="syncStatusBox" class="wizard-status"></div>
-
-          <div id="syncActiveActions" class="backup-actions hidden">
-            <button id="syncNowBtn" class="btn btn-block" type="button">🔄 Đồng bộ ngay (đẩy bản trên máy này lên Drive)</button>
-            <button id="syncPullBtn" class="btn btn-block" type="button">⬇ Kéo bản trên Drive về máy này</button>
-            <button id="syncDisableBtn" class="btn btn-block" type="button">⛔ Tắt đồng bộ tự động</button>
-          </div>
-
-          <button id="syncEnableBtn" class="btn btn-primary btn-block" type="button">☁️ Bật đồng bộ tự động</button>
-
-          <div id="syncWizard" class="account-wizard hidden">
-            <div class="wizard-head">
-              <div>
-                <strong>☁️ Bật đồng bộ tự động qua Google Drive</strong>
-                <div class="wizard-sub">Dùng chung Google Sign-In đã có sẵn trong app - chỉ cần cấp thêm quyền đọc/ghi Drive, không cần tạo Project hay API Key mới.</div>
-              </div>
-              <button id="closeSyncWizardBtn" class="btn btn-sm" type="button">Đóng</button>
-            </div>
-
-            <div class="wizard-progress">
-              <span data-swstep="1">1. Chọn folder</span>
-              <span data-swstep="2">2. Cấp quyền</span>
-              <span data-swstep="3">3. Kiểm tra</span>
-            </div>
-
-            <div class="wizard-panel" data-spanel="1">
-              <div class="wizard-number">1</div>
-              <h3>Chọn folder Drive để lưu file đồng bộ</h3>
-              <p>
-                Dùng 1 folder bạn có quyền chỉnh sửa (folder riêng tư cũng
-                được - không bắt buộc chia sẻ công khai, vì lần này app
-                đăng nhập thẳng bằng tài khoản Google của bạn để ghi file,
-                không cần API Key). Có thể dùng lại đúng folder chứa phim,
-                hoặc tạo 1 folder mới riêng để chứa file cấu hình.
-              </p>
-              <input id="syncFolderLink" type="url" placeholder="https://drive.google.com/drive/folders/...">
-              <button id="syncStep1Next" class="btn btn-primary" type="button">Tiếp tục →</button>
-            </div>
-
-            <div class="wizard-panel hidden" data-spanel="2">
-              <div class="wizard-number">2</div>
-              <h3>Đăng nhập & cấp quyền Google Drive</h3>
-              <p>Bấm nút bên dưới, chọn đúng tài khoản Google chứa folder ở bước 1, rồi bấm <b>Cho phép</b>.</p>
-              <button id="syncLoginBtn" class="btn api-link-btn" type="button">🔐 Đăng nhập & Cấp quyền Drive</button>
-              <div id="syncLoginStatus" class="wizard-status"></div>
-              <div class="wizard-note">
-                ⚠ Google có thể hiện cảnh báo "Ứng dụng này chưa được xác
-                minh" - đây là bình thường vì app do bạn tự dùng riêng.
-                Bấm <b>Advanced / Nâng cao</b> → <b>Đi tới ... (không an
-                toàn)</b> → <b>Tiếp tục</b> để cấp quyền như bình thường.
-              </div>
-            </div>
-
-            <div class="wizard-panel hidden" data-spanel="3">
-              <div class="wizard-number">3</div>
-              <h3>Kiểm tra & lưu thử</h3>
-              <p>App sẽ thử tạo/ghi file sao lưu vào đúng folder bạn chọn để chắc chắn quyền ghi hoạt động.</p>
-              <button id="syncTestBtn" class="btn api-link-btn" type="button">🔍 Kiểm tra & Lưu thử</button>
-              <div id="syncTestStatus" class="wizard-status"></div>
-              <button id="syncFinishBtn" class="btn btn-primary" type="button" disabled>✓ Bật đồng bộ tự động</button>
-            </div>
-          </div>
-
-          <p class="hint">
-            Lưu ý: đây là đồng bộ 1 chiều-cuốn-chiếu theo thời gian (bản
-            sửa sau cùng thắng), phù hợp khi bạn dùng lần lượt từng máy,
-            không phải chỉnh sửa cùng lúc trên nhiều máy.
-          </p>
         </div>
 
         <div class="settings-panel-content hidden" data-settings-panel="shortcuts">
