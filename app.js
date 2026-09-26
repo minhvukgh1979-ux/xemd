@@ -1865,9 +1865,16 @@ async function downloadApk(video) {
 // Điểm vào khi người dùng bấm mở 1 mục MỚI từ lưới / xem tiếp / tìm kiếm:
 // dựng lại hàng đợi (và thứ tự trộn bài) rồi phát.
 function openPlayer(rawVideo) {
-  ensureUnlocked(function () {
+  // Chỉ hỏi mật khẩu khi mở PHIM (video). Nhạc và các loại khác thì
+  // không cần mật khẩu, mở thẳng như bình thường.
+  const isVideoType = rawVideo && rawVideo.mediaType !== 'audio';
+  if (isVideoType) {
+    ensureUnlocked(function () {
+      openPlayerAfterUnlock(rawVideo);
+    });
+  } else {
     openPlayerAfterUnlock(rawVideo);
-  });
+  }
 }
 
 async function openPlayerAfterUnlock(rawVideo) {
