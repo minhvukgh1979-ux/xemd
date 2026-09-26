@@ -32,7 +32,7 @@
       </div>
       <select id="sortSelect" tabindex="0">
         <option value="name">Tên A → Z</option>
-        <option value="newest">Mới thêm gần đây</option>
+        <option value="newest">Ngày thêm mới nhất</option>
         <option value="favorite">Yêu thích trước</option>
         <option value="progress">Đang xem dở trước</option>
       </select>
@@ -161,6 +161,7 @@
       <div class="settings-tabs" id="settingsTabs">
         <button class="settings-tab active" type="button" data-settings-tab="accounts" tabindex="0">📁 Tài khoản Drive</button>
         <button class="settings-tab" type="button" data-settings-tab="backup" tabindex="0">💾 Sao lưu</button>
+        <button class="settings-tab" type="button" data-settings-tab="password" tabindex="0">🔒 Mật khẩu xem</button>
         <button class="settings-tab" type="button" data-settings-tab="shortcuts" tabindex="0">⌨️ Phím tắt</button>
       </div>
 
@@ -200,6 +201,24 @@
           <p id="backupMsg" class="hint"></p>
         </div>
 
+        <div class="settings-panel-content hidden" data-settings-panel="password">
+          <p class="hint">
+            Mật khẩu này được hỏi mỗi khi mở xem video/nhạc (chỉ hỏi 1 lần
+            cho mỗi lần vào trang), để người khác không tự ý bấm xem được.
+            Mặc định là <b>vu123</b>. Mật khẩu chỉ lưu trên trình duyệt này.
+          </p>
+          <label for="oldPasswordInput">Mật khẩu hiện tại</label>
+          <input id="oldPasswordInput" type="password" tabindex="0" autocomplete="off" />
+          <label for="newPasswordInput">Mật khẩu mới</label>
+          <input id="newPasswordInput" type="password" tabindex="0" autocomplete="off" />
+          <label for="newPasswordConfirmInput">Nhập lại mật khẩu mới</label>
+          <input id="newPasswordConfirmInput" type="password" tabindex="0" autocomplete="off" />
+          <div class="settings-actions">
+            <button id="changePasswordBtn" class="btn btn-primary" type="button" tabindex="0">Đổi mật khẩu</button>
+          </div>
+          <p id="changePasswordMsg" class="hint"></p>
+        </div>
+
         <div class="settings-panel-content hidden" data-settings-panel="shortcuts">
           <p class="hint">Dùng bàn phím hoặc điều khiển TV để thao tác nhanh hơn.</p>
           <div class="shortcuts-grid">
@@ -226,6 +245,20 @@
       <div class="settings-footer">
         <button id="saveBtn" class="btn btn-primary btn-lg" tabindex="0">💾 Lưu cấu hình</button>
         <p id="settingsError" class="error"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL MẬT KHẨU XEM ==================== -->
+  <div id="passwordModal" class="modal-overlay hidden">
+    <div class="settings-box">
+      <h1>🔒 Nhập mật khẩu để xem</h1>
+      <label for="watchPasswordInput">Mật khẩu</label>
+      <input id="watchPasswordInput" type="password" tabindex="0" autocomplete="off" inputmode="text" />
+      <p id="watchPasswordError" class="error"></p>
+      <div class="settings-actions">
+        <button id="watchPasswordSubmitBtn" class="btn btn-primary" tabindex="0">Xác nhận</button>
+        <button id="watchPasswordCancelBtn" class="btn" tabindex="0">Huỷ</button>
       </div>
     </div>
   </div>

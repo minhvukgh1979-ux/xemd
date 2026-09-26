@@ -33,6 +33,8 @@ const LS_KEY_PROGRESS = 'drivetv_progress'; // {key: {time, duration, updatedAt}
 const LS_KEY_VIEW = 'drivetv_view';         // 'grid' | 'list'
 const LS_KEY_MEDIA_FILTER = 'drivetv_media_filter'; // 'all' | 'video' | 'audio' | 'apk'
 const LS_KEY_PLAYER_PREFS = 'drivetv_player_prefs'; // {shuffle, repeat}
+const LS_KEY_WATCH_PASSWORD = 'drivetv_watch_password'; // mật khẩu xem video/nhạc
+const DEFAULT_WATCH_PASSWORD = 'vu123';
 
 // ---------------- DOM refs ----------------
 
@@ -40,6 +42,11 @@ const gridScreen = document.getElementById('gridScreen');
 const playerScreen = document.getElementById('playerScreen');
 const settingsScreen = document.getElementById('settingsScreen');
 const editModal = document.getElementById('editModal');
+const passwordModal = document.getElementById('passwordModal');
+const watchPasswordInput = document.getElementById('watchPasswordInput');
+const watchPasswordError = document.getElementById('watchPasswordError');
+const watchPasswordSubmitBtn = document.getElementById('watchPasswordSubmitBtn');
+const watchPasswordCancelBtn = document.getElementById('watchPasswordCancelBtn');
 
 const settingsBtn = document.getElementById('settingsBtn');
 const signInBtn = document.getElementById('signInBtn');
@@ -283,6 +290,115 @@ function setProgress(key, data) {
   localStorage.setItem(LS_KEY_PROGRESS, JSON.stringify(store));
 }
 
+// ---------------- Mật khẩu xem video/nhạc ----------------
+// Chỉ hỏi mật khẩu 1 lần cho mỗi lần mở trang (lưu trong sessionStorage),
+// không phải hỏi lại trước mỗi video.
+
+const SS_KEY_UNLOCKED = 'drivetv_unlocked';
+let sessionUnlocked = false;
+let pendingUnlockCallback = null;
+
+function getWatchPassword() {
+  const saved = localStorage.getItem(LS_KEY_WATCH_PASSWORD);
+  return (saved !== null && saved !== '') ? saved : DEFAULT_WATCH_PASSWORD;
+}
+
+function setWatchPassword(pw) {
+  localStorage.setItem(LS_KEY_WATCH_PASSWORD, pw);
+}
+
+function isUnlocked() {
+  if (sessionUnlocked) return true;
+  try { return sessionStorage.getItem(SS_KEY_UNLOCKED) === '1'; }
+  catch (e) { return false; }
+}
+
+function markUnlocked() {
+  sessionUnlocked = true;
+  try { sessionStorage.setItem(SS_KEY_UNLOCKED, '1'); } catch (e) { /* bỏ qua */ }
+}
+
+function openPasswordModal() {
+  if (!passwordModal) return;
+  watchPasswordInput.value = '';
+  watchPasswordError.textContent = '';
+  passwordModal.classList.remove('hidden');
+  watchPasswordInput.focus();
+}
+
+function closePasswordModal() {
+  if (!passwordModal) return;
+  passwordModal.classList.add('hidden');
+  pendingUnlockCallback = null;
+}
+
+function submitWatchPassword() {
+  if (!watchPasswordInput) return;
+  const val = watchPasswordInput.value;
+  if (val === getWatchPassword()) {
+    markUnlocked();
+    passwordModal.classList.add('hidden');
+    const cb = pendingUnlockCallback;
+    pendingUnlockCallback = null;
+    if (cb) cb();
+  } else {
+    watchPasswordError.textContent = 'Sai mật khẩu, vui lòng thử lại.';
+    watchPasswordInput.value = '';
+    watchPasswordInput.focus();
+  }
+}
+
+// Gọi hàm callback ngay nếu đã mở khoá trong phiên này, ngược lại hỏi
+// mật khẩu trước rồi mới gọi callback.
+function ensureUnlocked(callback) {
+  if (isUnlocked()) { callback(); return; }
+  pendingUnlockCallback = callback;
+  openPasswordModal();
+}
+
+if (watchPasswordSubmitBtn) watchPasswordSubmitBtn.addEventListener('click', submitWatchPassword);
+if (watchPasswordCancelBtn) watchPasswordCancelBtn.addEventListener('click', closePasswordModal);
+if (watchPasswordInput) {
+  watchPasswordInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); submitWatchPassword(); }
+    if (e.key === 'Escape') { e.preventDefault(); closePasswordModal(); }
+  });
+}
+
+document.getElementById('changePasswordBtn')?.addEventListener('click', function () {
+  const oldPwInput = document.getElementById('oldPasswordInput');
+  const newPwInput = document.getElementById('newPasswordInput');
+  const confirmPwInput = document.getElementById('newPasswordConfirmInput');
+  const msgEl = document.getElementById('changePasswordMsg');
+  const oldPw = oldPwInput ? oldPwInput.value : '';
+  const newPw = newPwInput ? newPwInput.value : '';
+  const confirmPw = confirmPwInput ? confirmPwInput.value : '';
+
+  if (oldPw !== getWatchPassword()) {
+    msgEl.textContent = '✗ Mật khẩu hiện tại không đúng.';
+    msgEl.className = 'hint error-text';
+    return;
+  }
+  if (!newPw || newPw.length < 3) {
+    msgEl.textContent = '✗ Mật khẩu mới phải có ít nhất 3 ký tự.';
+    msgEl.className = 'hint error-text';
+    return;
+  }
+  if (newPw !== confirmPw) {
+    msgEl.textContent = '✗ Mật khẩu nhập lại không khớp.';
+    msgEl.className = 'hint error-text';
+    return;
+  }
+
+  setWatchPassword(newPw);
+  if (oldPwInput) oldPwInput.value = '';
+  if (newPwInput) newPwInput.value = '';
+  if (confirmPwInput) confirmPwInput.value = '';
+  msgEl.textContent = '✓ Đã đổi mật khẩu xem.';
+  msgEl.className = 'hint success-text';
+  toast('Đã đổi mật khẩu xem video.', 'ok');
+});
+
 // Tách folder ID từ link Drive, hoặc chuỗi ID thuần.
 function extractFolderId(text) {
   if (!text) return '';
@@ -415,7 +531,8 @@ function buildBackupPayload() {
     exportedAt: new Date().toISOString(),
     accounts: getAccounts(),
     meta: getMetaStore(),
-    progress: getProgressStore()
+    progress: getProgressStore(),
+    watchPassword: getWatchPassword()
   };
 }
 
@@ -424,6 +541,7 @@ function applyBackupPayload(data) {
   saveAccounts(data.accounts);
   if (data.meta && typeof data.meta === 'object') saveMetaStore(data.meta);
   if (data.progress && typeof data.progress === 'object') localStorage.setItem(LS_KEY_PROGRESS, JSON.stringify(data.progress));
+  if (typeof data.watchPassword === 'string' && data.watchPassword) setWatchPassword(data.watchPassword);
 }
 
 function normalizeForSearch(str) {
@@ -1746,7 +1864,13 @@ async function downloadApk(video) {
 
 // Điểm vào khi người dùng bấm mở 1 mục MỚI từ lưới / xem tiếp / tìm kiếm:
 // dựng lại hàng đợi (và thứ tự trộn bài) rồi phát.
-async function openPlayer(rawVideo) {
+function openPlayer(rawVideo) {
+  ensureUnlocked(function () {
+    openPlayerAfterUnlock(rawVideo);
+  });
+}
+
+async function openPlayerAfterUnlock(rawVideo) {
   buildQueue(rawVideo);
   await openTrack(audioQueue[queueIndex] || rawVideo);
 }
@@ -2086,6 +2210,10 @@ document.addEventListener('keydown', function (e) {
   }
   if (!editModal.classList.contains('hidden')) {
     if (key === 'Escape') closeEditModal();
+    return;
+  }
+  if (passwordModal && !passwordModal.classList.contains('hidden')) {
+    if (key === 'Escape') closePasswordModal();
     return;
   }
 
