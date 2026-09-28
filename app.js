@@ -23,6 +23,7 @@ const OAUTH_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
 let accessToken = null;   // token hiện tại (null nếu chưa đăng nhập)
 let tokenClient = null;
 let swRegistration = null;
+let lastScanHadErrors = false; // lần quét gần nhất có lỗi -> tự quét lại khi vừa đăng nhập xong
 
 const LS_KEY_API = 'drivetv_api_key';             // cũ - chỉ dùng để migrate 1 lần
 const LS_KEY_FOLDER_LINK = 'drivetv_folder_link'; // cũ - chỉ dùng để migrate 1 lần
@@ -487,6 +488,7 @@ function initGoogleAuth() {
       scope: OAUTH_SCOPE,
       callback: function (response) {
         if (response && response.access_token) {
+          const isFirstToken = !accessToken;
           accessToken = response.access_token;
           sendTokenToServiceWorker(accessToken);
           updateSignInButton();
@@ -495,11 +497,24 @@ function initGoogleAuth() {
           setTimeout(function () {
             if (tokenClient) tokenClient.requestAccessToken({ prompt: '' });
           }, Math.max(expiresInMs - 60000, 30000));
+          flushTokenWaiters(null, accessToken);
+          // Lần quét trước bị lỗi (vd. folder riêng tư chỉ đọc được khi đã
+          // đăng nhập) -> quét lại luôn cho người dùng khỏi bấm Tải lại.
+          if (isFirstToken && lastScanHadErrors) loadVideos();
+        } else {
+          flushTokenWaiters(new Error((response && (response.error_description || response.error)) || 'Không đăng nhập được Google.'));
         }
       },
-      error_callback: function () {
+      error_callback: function (err) {
         // Google báo không đăng nhập được (vd. disallowed_useragent) -
-        // im lặng bỏ qua, người dùng vẫn dùng được app qua API key.
+        // không làm gì với app (vẫn dùng được qua API key), chỉ báo cho
+        // nút "Chọn thư mục" đang chờ token nếu có.
+        const t = err && err.type;
+        flushTokenWaiters(new Error(
+          t === 'popup_closed' ? 'Bạn đã đóng cửa sổ đăng nhập Google.' :
+          t === 'popup_failed_to_open' ? 'Trình duyệt chặn cửa sổ đăng nhập Google. Hãy cho phép popup rồi thử lại.' :
+          'Không đăng nhập được Google.'
+        ));
       }
     });
   } catch (e) {
@@ -524,6 +539,107 @@ if ('serviceWorker' in navigator) {
 
 initGoogleAuth();
 updateSignInButton();
+
+// ---------------- Chọn thư mục Drive bằng Google Picker (cửa sổ giống Explorer) ----------------
+
+// Những nơi đang đợi đăng nhập xong để lấy token (vd. nút "Chọn thư mục").
+let tokenWaiters = [];
+
+function flushTokenWaiters(err, token) {
+  const list = tokenWaiters;
+  tokenWaiters = [];
+  list.forEach(function (w) { if (err) w.reject(err); else w.resolve(token); });
+}
+
+// Trả về Promise<token>. Nếu đã đăng nhập thì dùng luôn; nếu chưa (hoặc
+// force = true để đổi sang tài khoản trong `hint`) thì mở đăng nhập Google.
+// PHẢI gọi trực tiếp trong lúc xử lý cú bấm nút, để trình duyệt không chặn popup.
+function ensureAccessToken(hint, force) {
+  return new Promise(function (resolve, reject) {
+    if (accessToken && !force) { resolve(accessToken); return; }
+    if (isLikelyUnsupportedAuthBrowser()) {
+      reject(new Error('Trình duyệt/TV này không hỗ trợ đăng nhập Google. Hãy chọn folder trên máy tính/điện thoại, hoặc dán link thủ công.'));
+      return;
+    }
+    if (!tokenClient) initGoogleAuth();
+    if (!tokenClient) {
+      reject(new Error('Thư viện đăng nhập Google chưa tải xong, thử lại sau vài giây.'));
+      return;
+    }
+    tokenWaiters.push({ resolve: resolve, reject: reject });
+    try {
+      tokenClient.requestAccessToken(hint ? { hint: hint } : {});
+    } catch (e) {
+      flushTokenWaiters(e);
+    }
+  });
+}
+
+const PICKER_APP_ID = OAUTH_CLIENT_ID.split('-')[0]; // số project Google Cloud
+let pickerLibPromise = null;
+
+function loadPickerLib() {
+  if (pickerLibPromise) return pickerLibPromise;
+  pickerLibPromise = new Promise(function (resolve, reject) {
+    function loadPicker() {
+      window.gapi.load('picker', {
+        callback: resolve,
+        onerror: function () { reject(new Error('Không tải được Google Picker.')); },
+        timeout: 8000,
+        ontimeout: function () { reject(new Error('Tải Google Picker quá lâu, kiểm tra mạng rồi thử lại.')); }
+      });
+    }
+    if (window.gapi && window.gapi.load) { loadPicker(); return; }
+    const script = document.createElement('script');
+    script.src = 'https://apis.google.com/js/api.js';
+    script.async = true;
+    script.onload = loadPicker;
+    script.onerror = function () { reject(new Error('Không tải được Google Picker (mạng chặn apis.google.com?).')); };
+    document.head.appendChild(script);
+  });
+  pickerLibPromise.catch(function () { pickerLibPromise = null; }); // cho phép thử lại lần sau
+  return pickerLibPromise;
+}
+
+// Mở hộp thoại chọn thư mục. Trả về Promise<{id, name} | null (nếu huỷ)>.
+function openDriveFolderPicker(token, developerKey) {
+  return new Promise(function (resolve) {
+    const g = window.google.picker;
+    const FOLDER_MIME = 'application/vnd.google-apps.folder';
+
+    function folderView(label) {
+      const v = new g.DocsView(g.ViewId.FOLDERS)
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true)
+        .setMimeTypes(FOLDER_MIME);
+      if (typeof v.setLabel === 'function') v.setLabel(label); // setLabel đã bị Google đánh dấu lỗi thời, có thì dùng
+      return v;
+    }
+
+    const picker = new g.PickerBuilder()
+      .setAppId(PICKER_APP_ID)
+      .setOAuthToken(token)
+      .setDeveloperKey(developerKey)
+      .setOrigin(window.location.protocol + '//' + window.location.host)
+      .setTitle('Chọn thư mục chứa video/nhạc')
+      .setLocale('vi')
+      .enableFeature(g.Feature.SUPPORT_DRIVES)
+      .addView(folderView('Drive của tôi').setParent('root'))
+      .addView(folderView('Tất cả thư mục (gồm được chia sẻ)'))
+      .addView(folderView('Drive dùng chung').setEnableDrives(true))
+      .setCallback(function (data) {
+        const action = data[g.Response.ACTION];
+        if (action === g.Action.PICKED) {
+          const doc = data[g.Response.DOCUMENTS][0];
+          resolve({ id: doc[g.Document.ID], name: doc[g.Document.NAME] });
+        } else if (action === g.Action.CANCEL) {
+          resolve(null);
+        }
+      })
+      .build();
+    picker.setVisible(true);
+  });
+}
 
 // ---- Dùng chung với tab "Sao lưu": gói toàn bộ cấu hình / áp dụng lại ----
 function buildBackupPayload() {
@@ -628,19 +744,36 @@ function isSubtitleFile(file) {
 
 // ---------------- Quét toàn bộ file trong 1 folder Drive ----------------
 
-async function listFolderFiles(apiKey, folderId) {
+async function listFolderFiles(apiKey, folderId, opts) {
+  opts = opts || {};
   let files = [];
   let pageToken = '';
+  // Đã đăng nhập Google -> dùng token (đọc được cả folder riêng tư / Drive dùng chung).
+  // opts.noAuth = true: cố tình thử như "người lạ" (chỉ API key) để biết folder
+  // đã chia sẻ công khai chưa.
+  let useToken = !!accessToken && !opts.noAuth;
 
-  do {
+  function buildUrl(withToken) {
     const q = encodeURIComponent("'" + folderId + "' in parents and trashed = false");
     let url = 'https://www.googleapis.com/drive/v3/files?q=' + q +
       '&fields=' + encodeURIComponent('nextPageToken, files(id,name,mimeType,thumbnailLink,createdTime,size)') +
       '&orderBy=' + encodeURIComponent('name') +
-      '&pageSize=1000&key=' + encodeURIComponent(apiKey);
+      '&supportsAllDrives=true&includeItemsFromAllDrives=true' +
+      '&pageSize=1000';
+    if (!withToken) url += '&key=' + encodeURIComponent(apiKey);
     if (pageToken) url += '&pageToken=' + encodeURIComponent(pageToken);
+    return url;
+  }
 
-    const res = await fetch(url);
+  do {
+    let res = await fetch(buildUrl(useToken), useToken ? { headers: { Authorization: 'Bearer ' + accessToken } } : undefined);
+    if (res.status === 401 && useToken) {
+      // Token hết hạn -> bỏ token, thử lại bằng API key.
+      accessToken = null;
+      updateSignInButton();
+      useToken = false;
+      res = await fetch(buildUrl(false));
+    }
     const data = await res.json();
 
     if (!res.ok) {
@@ -1064,7 +1197,16 @@ function renderAccountRows() {
         const folderId = extractFolderId(folderLink);
         const files = await listFolderFiles(apiKey, folderId);
         const videoCount = files.filter(isPlayableMediaFile).length;
-        if (videoCount > 0) {
+        // Đang đăng nhập thì thử thêm 1 lần "như người lạ" (chỉ API key) để
+        // biết folder có được chia sẻ công khai không.
+        let isPublic = true;
+        if (accessToken) {
+          try { await listFolderFiles(apiKey, folderId, { noAuth: true }); } catch (e) { isPublic = false; }
+        }
+        if (videoCount > 0 && !isPublic) {
+          checkStatus.textContent = '⚠ Tìm thấy ' + videoCount + ' video nhờ đang đăng nhập, nhưng folder CHƯA chia sẻ \"Bất kỳ ai có đường liên kết\". Mở lại trang sẽ phải bấm 👤 đăng nhập mới thấy.';
+          checkStatus.className = 'account-check-status warn';
+        } else if (videoCount > 0) {
           checkStatus.textContent = '✓ OK - tìm thấy ' + videoCount + ' video.';
           checkStatus.className = 'account-check-status ok';
         } else {
@@ -1079,6 +1221,47 @@ function renderAccountRows() {
       }
     });
 
+    // ---- Nút mở cửa sổ chọn thư mục Google Drive (giống Explorer) ----
+    const pickBtn = document.createElement('button');
+    pickBtn.type = 'button';
+    pickBtn.className = 'btn account-check-btn';
+    pickBtn.textContent = '📂 Chọn thư mục từ Drive';
+    pickBtn.setAttribute('tabindex', '0');
+
+    pickBtn.addEventListener('click', async function () {
+      const apiKey = (row.apiKey || '').trim();
+      if (!apiKey) {
+        checkStatus.textContent = 'Nhập API Key trước (Google Picker cần key này).';
+        checkStatus.className = 'account-check-status err';
+        return;
+      }
+      pickBtn.disabled = true;
+      checkStatus.textContent = 'Đang mở Google Drive...';
+      checkStatus.className = 'account-check-status';
+      try {
+        const hint = (row.googleAccount || '').trim();
+        // Gọi 2 việc song song và gọi ensureAccessToken NGAY trong cú bấm,
+        // để cửa sổ đăng nhập không bị trình duyệt chặn.
+        const results = await Promise.all([ensureAccessToken(hint, !!hint), loadPickerLib()]);
+        const picked = await openDriveFolderPicker(results[0], apiKey);
+        if (!picked) {
+          checkStatus.textContent = '';
+          return;
+        }
+        row.folderLink = 'https://drive.google.com/drive/folders/' + picked.id;
+        folderInput.value = row.folderLink;
+        checkStatus.textContent = 'Đã chọn: ' + picked.name + ' - đang kiểm tra...';
+        checkBtn.click(); // tự kiểm tra folder vừa chọn
+      } catch (err) {
+        checkStatus.textContent = '✗ ' + (err && err.message ? err.message : String(err));
+        checkStatus.className = 'account-check-status err';
+      } finally {
+        pickBtn.disabled = false;
+      }
+    });
+
+    // Trình duyệt TV cũ không đăng nhập Google được -> không hiện nút này.
+    if (!isLikelyUnsupportedAuthBrowser()) checkRow.appendChild(pickBtn);
     checkRow.appendChild(checkBtn);
     checkRow.appendChild(checkStatus);
 
@@ -1513,6 +1696,7 @@ async function loadVideos() {
 
   try {
     allVideos = await fetchFolderVideos(accounts);
+    lastScanHadErrors = (allVideos._partialErrors || []).length > 0;
     searchInput.value = '';
     if (clearSearchBtn) clearSearchBtn.classList.add('hidden');
     applyFilters();
@@ -1525,6 +1709,7 @@ async function loadVideos() {
     const firstCard = videoGrid.querySelector('.card');
     if (firstCard) firstCard.focus();
   } catch (err) {
+    lastScanHadErrors = true;
     statusMsg.textContent = 'Lỗi quét folder: ' + err.message;
   }
 }
@@ -2287,4 +2472,3 @@ if (isConfigured()) {
   showScreen('grid');
   openSettings();
 }
-
