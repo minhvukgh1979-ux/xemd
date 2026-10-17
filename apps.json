@@ -1,0 +1,11 @@
+{
+  "_ghi_chu": "File này chỉ để đặt tên/biểu tượng đẹp cho app trong repo. Không bắt buộc: file .html nào up lên repo cũng tự hiện (trừ index.html).",
+  "apps": [
+    {
+      "file": "hand-grab-3d-map4.html",
+      "name": "Hand Grab 3D – cầm nắm vật ảo",
+      "icon": "🖐️",
+      "desc": "Nhận dạng bàn tay bằng camera để cầm, nắm, di chuyển vật 3D. Cần webcam và internet."
+    }
+  ]
+}

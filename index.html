@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Dethi Drive TV</title>
 <link rel="stylesheet" href="style.css" />
+<link rel="stylesheet" href="apps.css" />
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -50,6 +51,10 @@
         <button class="media-switch-btn active" type="button" data-media="video" tabindex="0">🎬 Phim</button>
         <button class="media-switch-btn" type="button" data-media="audio" tabindex="0">🎵 Nhạc</button>
         <button class="media-switch-btn" type="button" data-media="apk" tabindex="0">📦 APK</button>
+      </div>
+      <!-- Ứng dụng phụ (app HTML: Hand Grab 3D...) - tách riêng, xử lý bởi apps.js -->
+      <div class="apps-switch">
+        <button id="appsOpenBtn" class="apps-switch-btn" type="button" tabindex="0" title="Ứng dụng chạy trực tiếp / tải về">🧩 Ứng dụng</button>
       </div>
     </div>
 
@@ -293,5 +298,6 @@
   <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
   <script src="app.js"></script>
+  <script src="apps.js"></script>
 </body>
 </html>
